@@ -1,4 +1,4 @@
-# Проект называется Fravashi (ранее AegisVault). Каталог проекта на хосте может называться иначе (например, my-vault).
+# Fravashi (formerly AegisVault). The project directory on the host may have a different name.
 services:
   fravashi:
     build: .
@@ -7,9 +7,10 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8585:8000"
-    # UID:GID владельца ./data. По умолчанию 1000:1000.
-    # Узнать: по SSH на хосте (например, Synology NAS) выполнить `id <пользователь>` (или `stat -c '%u:%g' data`),
-    # затем задать VAULT_UID / VAULT_GID в файле .env рядом с compose и выдать права:
+    # UID:GID of the owner of ./data (default 1000:1000).
+    # To find it, run `stat -c '%u:%g' data` on the host (on a NAS, `id <user>` over SSH also works),
+    # then set VAULT_UID / VAULT_GID in the .env file next to this compose file.
+    # On Linux also fix ownership:
     #   sudo chown -R <UID>:<GID> ./data && sudo chmod 700 ./data
     user: "${VAULT_UID:-1000}:${VAULT_GID:-1000}"
     security_opt:
@@ -25,6 +26,6 @@ services:
     environment:
       - TZ=${TZ:-UTC}
       - DB_PATH=/app/data/vault-v2.db
-      # Необязательные: пусто — поведение по умолчанию (см. README)
+      # Optional: empty means default behaviour (see README)
       - SETUP_TOKEN=${SETUP_TOKEN:-}
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}

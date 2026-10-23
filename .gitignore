@@ -6,6 +6,7 @@ target/
 *.sqlite3
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 *.csv
@@ -16,3 +17,4 @@ fravashi_recovery_key*.txt
 aegis_recovery_key*.txt
 .claude/
 node_modules/
+CLAUDE.md

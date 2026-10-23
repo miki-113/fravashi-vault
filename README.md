@@ -84,6 +84,15 @@ Optional and per user. Users who do not turn it on sign in exactly as before.
 
 Generated in the browser when you press "Download fravashi-extension.zip" (`static/extension-build.js`) and installed as an unpacked extension in Chromium-based desktop browsers. The server address and the window language are taken from the app at the moment of download; if that language is missing, the browser language is used. Version 1.3.2.
 
+**Installing it, step by step:**
+
+1. Sign in to the app over `https://` and open Tools & types → Browser extension → "Download fravashi-extension.zip". The archive is built for the address of your server, so download it from the server you will use.
+2. Unpack the zip into a folder you will keep (the browser reads the extension from there).
+3. In Chrome, Edge, Brave or another Chromium browser open `chrome://extensions` (Edge: `edge://extensions`) and turn on "Developer mode".
+4. Click "Load unpacked" and select the unpacked folder.
+
+The extension works only with an `https://` server address.
+
 **Permissions** (`manifest.json`):
 
 | Permission | Why |
@@ -110,7 +119,7 @@ No `<all_urls>`, no content scripts on every site, no `tabs`, `storage`, `clipbo
 The order is not a promise.
 
 - done: optional two-factor sign-in (TOTP), see [Two-factor sign-in](#two-factor-sign-in-totp)
-- done: browser extension 1.3.1 — English interface, narrow permissions (`activeTab`, `scripting`, the server address only), bank card autofill with confirmation, see [Browser extension](#browser-extension)
+- done: browser extension 1.3.2 — English interface, narrow permissions (`activeTab`, `scripting`, the server address only), bank card autofill with confirmation, see [Browser extension](#browser-extension)
 - deferred on purpose: browser extension session ("stay unlocked for N minutes"). For now the extension asks for the master password (and the code, if two-factor sign-in is on) every time its window is opened
 - planned: quick unlock with Face ID / Touch ID / Windows Hello / passkey (WebAuthn PRF)
 - done: loyalty cards with a barcode / QR code (EAN-13, EAN-8, Code 128, Code 39, QR); the extension skips them
@@ -121,36 +130,70 @@ The order is not a promise.
 
 ## Quick start (Docker)
 
-Requirements: Docker with Compose, and a reverse proxy that terminates HTTPS (nginx, Caddy, Traefik, the Synology DSM reverse proxy, etc.).
+Requirements: Docker with Compose and, for any access other than from the host itself, a reverse proxy that terminates HTTPS (nginx, Caddy, Traefik, the Synology DSM reverse proxy, etc.).
+
+**Why HTTPS.** The app encrypts everything in the browser with the Web Crypto API (`crypto.subtle`), and browsers expose it only in a secure context. Opening the server over plain `http://` from another device will not work. Browsers treat `http://127.0.0.1:8585` and `http://localhost:8585` as secure, so to try the app on the host itself you do not need a proxy. The browser extension also works only with an `https://` server address.
 
 ```sh
 git clone https://github.com/miki-113/fravashi-vault.git fravashi
 cd fravashi
 mkdir data
+cp .env.example .env        # Windows (PowerShell): Copy-Item .env.example .env
 ```
 
-Create a `.env` file next to `docker-compose.yml`. `VAULT_UID` and `VAULT_GID` must be the owner of `./data` (check with `stat -c '%u:%g' data`; the default is 1000:1000):
+Edit `.env` (all variables are described in `.env.example`). `VAULT_UID` and `VAULT_GID` must be the owner of `./data` (check with `stat -c '%u:%g' data`; the default is 1000:1000).
 
-```
-VAULT_UID=1000
-VAULT_GID=1000
-# TZ=UTC
-# SETUP_TOKEN=<a long random string>   # optional, see below
-# TRUSTED_PROXIES=                        # optional, see below
-```
+**Permissions on `data/` (Linux only).** Make the directory belong to that user:
 
 ```sh
 sudo chown -R 1000:1000 ./data && sudo chmod 700 ./data
+```
+
+On Docker Desktop (Windows/macOS) this is not needed. Then start:
+
+```sh
 docker compose up -d --build
 ```
 
-The container listens on `127.0.0.1:8585` only (it is not reachable from the network directly). Point your HTTPS reverse proxy at `http://127.0.0.1:8585`, for example `https://vault.example.com`. Open that address and register; the first user becomes the administrator and can then invite other family members with one-time invite codes.
+If the names `fravashi` (container or image) clash with something you already run, remove `container_name` and `image` from `docker-compose.yml`.
 
-**Register the owner before the instance is reachable from the internet.** Until the first account exists, anyone who opens the address can register and become the administrator. To close that window, set `SETUP_TOKEN` in `.env` to a long random string: the first registration then shows a "Setup token" field and is accepted only with the matching value (compared in constant time). After the administrator exists, the token is no longer used and can be removed. If `SETUP_TOKEN` is not set, the first registration works as before.
+The container listens on `127.0.0.1:8585` only (it is not reachable from the network directly). Put an HTTPS reverse proxy in front of it, for example for `https://vault.example.com`:
 
-**Reverse proxy and client IP addresses.** Attempt limits are counted per client IP. Behind a proxy, the server sees the proxy's address, so it takes the client address from the **last** entry of `X-Forwarded-For`. Your proxy must append the client address to that header (nginx: `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`). The header is trusted only when the connection comes from a trusted proxy address: by default loopback and private ranges (`127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`), which covers a proxy on the same host and the Docker gateway. To change this, set `TRUSTED_PROXIES` to a comma-separated list of addresses or subnets, or to `none` to ignore the header. Do not publish the container port to the network (keep `127.0.0.1:8585`): a client that can connect directly from a private range could otherwise fake its address.
+```
+# Caddy (Caddyfile)
+vault.example.com {
+    reverse_proxy 127.0.0.1:8585 {
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+```
 
-The container runs as an unprivileged user with a read-only root file system and all capabilities dropped. Synology NAS is one example of a host; any Linux machine with Docker works.
+```
+# nginx (inside a server block with your TLS certificate)
+location / {
+    proxy_pass http://127.0.0.1:8585;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+**Register the owner before the instance is reachable from the internet.** Until the first account exists, anyone who opens the address can register and become the administrator. To close that window, set `SETUP_TOKEN` in `.env` to a long random string:
+
+```sh
+openssl rand -hex 16        # copy the result into SETUP_TOKEN=... in .env
+docker compose up -d        # apply the change
+curl http://127.0.0.1:8585/api/status
+```
+
+`/api/status` must contain `"setup_token_required": true` (it is `false` once an administrator exists or when the token is not set). The first registration then shows a "Setup token" field and is accepted only with the matching value (compared in constant time). After the administrator exists, the token is no longer used and can be removed. If `SETUP_TOKEN` is not set, the first registration works without it.
+
+**First registration.** Open the address and register; the first user becomes the administrator and can then invite other family members with one-time invite codes. After registering, the app shows a **recovery key**. Download it and store it separately from the master password (not in the same password manager, not next to the password). The master password and the recovery key are the only ways to your data: if you lose **both**, the data cannot be recovered by anyone, including the server administrator.
+
+**Reverse proxy and client IP addresses.** Attempt limits are counted per client IP. Behind a proxy, the server sees the proxy's address, so it takes the client address from the **last** entry of `X-Forwarded-For`. Your proxy must append the client address to that header (see the examples above). The header is trusted only when the connection comes from a trusted proxy address: by default loopback and private ranges (`127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`), which covers a proxy on the same host and the Docker gateway. To change this, set `TRUSTED_PROXIES` to a comma-separated list of addresses or subnets, or to `none` to ignore the header. Do not publish the container port to the network (keep `127.0.0.1:8585`): a client that can connect directly from a private range could otherwise fake its address.
+
+The container runs as an unprivileged user with a read-only root file system and all capabilities dropped. Synology NAS is one example of a host; any machine with Docker works.
 
 ## Build from source
 
@@ -176,24 +219,29 @@ npm run build:templates
 
 ## Backup and restore
 
-All state is in the `data/` directory (SQLite database `vault-v2.db`).
+All state is in the `data/` directory (SQLite database `vault-v2.db` with WAL files). Stop the container before copying, otherwise the copy may be inconsistent:
 
 ```sh
 docker compose stop
-cp -a data /path/to/backup/data-$(date +%F)
+sudo cp -a data /path/to/backup/data-$(date +%F)
 docker compose start
 ```
 
-To restore, stop the container, replace the contents of `data/` with the backup, fix ownership (`chown -R <VAULT_UID>:<VAULT_GID> data`) and start it again. Store backups somewhere safe: they are encrypted, but they can be attacked offline. Also export a JSON copy from the app from time to time; that file is **not** encrypted, so delete it after use.
+`sudo` is needed because the files belong to `VAULT_UID`; `cp -a` keeps ownership and permissions.
+
+To restore, stop the container, replace the contents of `data/` with the backup, fix ownership (`sudo chown -R <VAULT_UID>:<VAULT_GID> data`) and start it again. Store backups somewhere safe: they are encrypted, but they can be attacked offline. Also export a JSON copy from the app from time to time; that file is **not** encrypted, so delete it after use.
 
 ## Update
+
+1. Make a backup of `data/` (see above).
+2. Update and rebuild:
 
 ```sh
 git pull
 docker compose up -d --build
 ```
 
-Make a backup first. After an update, reinstall the browser extension and the PWA if the release notes say the key scheme or caches changed.
+After an update, reinstall the browser extension and the PWA if the release notes say the key scheme or caches changed.
 
 ## Screenshots
 
