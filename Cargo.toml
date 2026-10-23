@@ -27,5 +27,8 @@ rand = "0.8"
 flate2 = "1.0"
 chrono = "0.4"
 tower-http = { version = "0.5", features = ["fs"] }
+sha1 = "0.10"
+aes-gcm = "0.10"
+
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

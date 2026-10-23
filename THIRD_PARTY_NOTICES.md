@@ -22,7 +22,7 @@ Font Awesome Free attribution: icons © Fonticons, Inc., licensed under CC BY 4.
 
 ## Rust crates
 
-126 crates in the dependency graph of `Cargo.lock` (direct and transitive), generated from `cargo metadata --locked`. The license column is the SPDX expression declared by each crate.
+137 crates in the dependency graph of `Cargo.lock` (direct and transitive), generated from `cargo metadata --locked`. The license column is the SPDX expression declared by each crate.
 
 To regenerate or check the list yourself:
 
@@ -35,6 +35,9 @@ cargo install cargo-about && cargo about      # full license texts
 | Crate | Version | License |
 |---|---|---|
 | adler2 | 2.0.1 | 0BSD OR MIT OR Apache-2.0 |
+| aead | 0.5.2 | MIT OR Apache-2.0 |
+| aes | 0.8.4 | MIT OR Apache-2.0 |
+| aes-gcm | 0.10.3 | Apache-2.0 OR MIT |
 | ahash | 0.8.12 | MIT OR Apache-2.0 |
 | android_system_properties | 0.1.6 | MIT OR Apache-2.0 |
 | argon2 | 0.5.3 | MIT OR Apache-2.0 |
@@ -52,10 +55,12 @@ cargo install cargo-about && cargo about      # full license texts
 | cc | 1.9.0 | MIT OR Apache-2.0 |
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 |
 | chrono | 0.4.45 | MIT OR Apache-2.0 |
+| cipher | 0.4.4 | MIT OR Apache-2.0 |
 | core-foundation-sys | 0.8.7 | MIT OR Apache-2.0 |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 |
 | crc32fast | 1.5.3 | MIT OR Apache-2.0 |
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 |
+| ctr | 0.9.2 | MIT OR Apache-2.0 |
 | digest | 0.10.7 | MIT OR Apache-2.0 |
 | errno | 0.3.14 | MIT OR Apache-2.0 |
 | fallible-iterator | 0.3.0 | MIT/Apache-2.0 |
@@ -69,6 +74,7 @@ cargo install cargo-about && cargo about      # full license texts
 | futures-util | 0.3.34 | MIT OR Apache-2.0 |
 | generic-array | 0.14.7 | MIT |
 | getrandom | 0.2.17 | MIT OR Apache-2.0 |
+| ghash | 0.5.1 | Apache-2.0 OR MIT |
 | hashbrown | 0.14.5 | MIT OR Apache-2.0 |
 | hashlink | 0.9.1 | MIT OR Apache-2.0 |
 | hex | 0.4.3 | MIT OR Apache-2.0 |
@@ -82,6 +88,7 @@ cargo install cargo-about && cargo about      # full license texts
 | hyper-util | 0.1.21 | MIT |
 | iana-time-zone | 0.1.65 | MIT OR Apache-2.0 |
 | iana-time-zone-haiku | 0.1.2 | MIT OR Apache-2.0 |
+| inout | 0.1.4 | MIT OR Apache-2.0 |
 | itoa | 1.0.18 | MIT OR Apache-2.0 |
 | js-sys | 0.3.106 | MIT OR Apache-2.0 |
 | libc | 0.2.191 | MIT OR Apache-2.0 |
@@ -96,12 +103,14 @@ cargo install cargo-about && cargo about      # full license texts
 | mio | 1.2.4 | MIT |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 |
 | once_cell | 1.21.4 | MIT OR Apache-2.0 |
+| opaque-debug | 0.3.1 | MIT OR Apache-2.0 |
 | parking_lot | 0.12.5 | MIT OR Apache-2.0 |
 | parking_lot_core | 0.9.12 | MIT OR Apache-2.0 |
 | password-hash | 0.5.0 | MIT OR Apache-2.0 |
 | percent-encoding | 2.3.2 | MIT OR Apache-2.0 |
 | pin-project-lite | 0.2.17 | Apache-2.0 OR MIT |
 | pkg-config | 0.3.34 | MIT OR Apache-2.0 |
+| polyval | 0.6.2 | Apache-2.0 OR MIT |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |
 | proc-macro2 | 1.0.107 | MIT OR Apache-2.0 |
 | quote | 1.0.47 | MIT OR Apache-2.0 |
@@ -119,6 +128,7 @@ cargo install cargo-about && cargo about      # full license texts
 | serde_json | 1.0.154 | MIT OR Apache-2.0 |
 | serde_path_to_error | 0.1.20 | MIT OR Apache-2.0 |
 | serde_urlencoded | 0.7.1 | MIT/Apache-2.0 |
+| sha1 | 0.10.7 | MIT OR Apache-2.0 |
 | sha2 | 0.10.9 | MIT OR Apache-2.0 |
 | shlex | 2.0.1 | MIT OR Apache-2.0 |
 | signal-hook-registry | 1.4.8 | MIT OR Apache-2.0 |
@@ -130,7 +140,7 @@ cargo install cargo-about && cargo about      # full license texts
 | syn | 2.0.119 | MIT OR Apache-2.0 |
 | syn | 3.0.9 | MIT OR Apache-2.0 |
 | sync_wrapper | 1.0.2 | Apache-2.0 |
-| tokio | 1.54.0 | MIT |
+| tokio | 1.54.1 | MIT |
 | tokio-macros | 2.7.2 | MIT |
 | tokio-util | 0.7.20 | MIT |
 | tower | 0.5.3 | MIT |
@@ -142,6 +152,7 @@ cargo install cargo-about && cargo about      # full license texts
 | typenum | 1.20.1 | MIT OR Apache-2.0 |
 | unicase | 2.10.0 | MIT OR Apache-2.0 |
 | unicode-ident | 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 |
+| universal-hash | 0.5.1 | MIT OR Apache-2.0 |
 | vcpkg | 0.2.15 | MIT/Apache-2.0 |
 | version_check | 0.9.5 | MIT/Apache-2.0 |
 | wasi | 0.11.1+wasi-snapshot-preview1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |

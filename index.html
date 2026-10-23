@@ -116,7 +116,23 @@
                             {{ t('auth.subtitle') }}
                         </p>
 
-                        <div v-if="authMode === 'login'" class="space-y-3.5">
+                        <div v-if="authMode === 'login' && totpStepActive" class="space-y-3.5">
+                            <p class="text-[11px]">{{ totpUseBackup ? t('totp.login.backupHint') : t('totp.login.hint') }}</p>
+                            <label class="block text-[11px] font-semibold">{{ totpUseBackup ? t('totp.login.backupCode') : t('totp.code') }}
+                                <input v-model="totpLoginCode" :inputmode="totpUseBackup ? 'text' : 'numeric'" autocomplete="one-time-code" @keyup.enter="handleTotpLogin"
+                                       :placeholder="totpUseBackup ? 'XXXX-XXXX-XXXX-XXXX' : '123456'" :maxlength="totpUseBackup ? 24 : 6"
+                                       :class="['mt-1.5 h-10 w-full rounded-lg border px-3 font-mono text-[14px] tracking-widest font-normal outline-none focus:border-[#6d8df0]', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                            </label>
+                            <button @click="handleTotpLogin" class="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#315bd7] text-[12px] font-semibold text-white shadow-[0_5px_14px_rgba(49,91,215,0.28)] transition hover:bg-[#264cc4]">
+                                <i class="fa-solid fa-shield-halved text-xs"></i> {{ t('totp.login.verify') }}
+                            </button>
+                            <div class="flex justify-between pt-2 text-[11px]">
+                                <a href="#" @click.prevent="toggleTotpBackup" class="font-semibold text-[#315bd7] dark:text-[#91d2ff]">{{ totpUseBackup ? t('totp.login.useApp') : t('totp.login.useBackup') }}</a>
+                                <a href="#" @click.prevent="cancelTotpLogin" class="text-[#7281a4] hover:underline">{{ t('auth.backToLogin') }}</a>
+                            </div>
+                        </div>
+
+                        <div v-else-if="authMode === 'login'" class="space-y-3.5">
                             <label class="block text-[11px] font-semibold">{{ t('auth.username') }}
                                 <input v-model="loginForm.username" type="text" placeholder="admin"
                                        :class="['mt-1.5 h-10 w-full rounded-lg border px-3 text-[13px] font-normal outline-none focus:border-[#6d8df0]', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
@@ -1341,12 +1357,52 @@
             </div>
 
             <div v-if="showSecurityModal" class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" @mousedown.self="showSecurityModal = false">
-                <div :class="['w-full max-w-md rounded-2xl border p-6 space-y-3', theme === 'dark' ? 'border-[#3c4e73] bg-[#202d49]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                <div :class="['w-full max-w-md rounded-2xl border p-6 space-y-3 max-h-[90dvh] overflow-y-auto', theme === 'dark' ? 'border-[#3c4e73] bg-[#202d49]' : 'border-[#dce3f4] bg-[#fffefa]']">
                     <h3 class="font-serif text-xl">{{ t('security.title') }}</h3>
                     <input v-model="pwdChangeForm.currentPassword" type="password" :placeholder="t('security.current')" class="h-9 w-full rounded-lg border px-3 text-xs bg-transparent" />
                     <input v-model="pwdChangeForm.newPassword" type="password" :placeholder="t('auth.newMasterPassword')" class="h-9 w-full rounded-lg border px-3 text-xs bg-transparent" />
                     <input v-model="pwdChangeForm.confirmPassword" type="password" :placeholder="t('security.repeatNew')" class="h-9 w-full rounded-lg border px-3 text-xs bg-transparent" />
                     <button @click="handleChangeOwnPassword" class="w-full h-9 rounded-lg bg-[#315bd7] text-xs font-semibold text-white">{{ t('common.save') }}</button>
+                    <div class="pt-3 border-t border-black/10 dark:border-white/10 space-y-2">
+                        <div class="flex items-center justify-between gap-3">
+                            <h4 class="text-sm font-semibold"><i class="fa-solid fa-shield-halved text-xs opacity-70"></i> {{ t('totp.title') }}</h4>
+                            <span v-if="totpStatus.loaded" :class="['rounded px-1.5 py-0.5 text-[10px] font-semibold', totpStatus.enabled ? 'bg-[#329371]/15 text-[#329371]' : 'bg-black/5 dark:bg-white/10 opacity-70']">{{ totpStatus.enabled ? t('totp.status.on') : t('totp.status.off') }}</span>
+                        </div>
+                        <p class="text-[10.5px] leading-snug opacity-70">{{ t('totp.hint') }}</p>
+                        <p v-if="sessionToken === 'OFFLINE_MODE'" class="text-[10.5px] text-[#d97706]">{{ t('totp.offline') }}</p>
+                        <template v-else-if="totpBackupCodes.length">
+                            <p class="text-[10.5px] font-semibold text-[#d97706]">{{ t('totp.backup.warning') }}</p>
+                            <div class="grid grid-cols-2 gap-1 rounded-lg border p-3 text-center font-mono text-xs select-text">
+                                <span v-for="c in totpBackupCodes" :key="c">{{ c }}</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button @click="copyBackupCodes" class="flex-1 h-9 rounded-lg border text-xs font-semibold">{{ t('common.copy') }}</button>
+                                <button @click="downloadBackupCodes" class="flex-1 h-9 rounded-lg bg-[#315bd7] text-xs font-semibold text-white">{{ t('totp.backup.download') }}</button>
+                            </div>
+                            <button @click="totpBackupCodes = []" class="w-full h-8 rounded-lg text-xs font-semibold opacity-75 hover:opacity-100">{{ t('totp.backup.saved') }}</button>
+                        </template>
+                        <template v-else-if="totpSetup">
+                            <p class="text-[10.5px] leading-snug">{{ t('totp.setup.scan') }}</p>
+                            <div class="flex justify-center"><div class="rounded-lg bg-white p-2" v-html="totpSetup.qr"></div></div>
+                            <p class="text-[10px] opacity-70">{{ t('totp.setup.manual') }}</p>
+                            <div class="cursor-pointer break-all rounded-lg border p-2 text-center font-mono text-[11px] select-text" @click="copyText(totpSetup.secret, false)">{{ totpSetup.secret }}</div>
+                            <input v-model="totpForm.code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" :placeholder="t('totp.code')" @keyup.enter="confirmTotpEnable" class="h-9 w-full rounded-lg border px-3 font-mono text-xs tracking-widest bg-transparent" />
+                            <div class="flex gap-2">
+                                <button @click="cancelTotpSetup" class="flex-1 h-9 rounded-lg border text-xs font-semibold">{{ t('common.cancel') }}</button>
+                                <button @click="confirmTotpEnable" class="flex-1 h-9 rounded-lg bg-[#315bd7] text-xs font-semibold text-white">{{ t('totp.setup.confirm') }}</button>
+                            </div>
+                        </template>
+                        <template v-else-if="totpStatus.enabled">
+                            <p class="text-[10.5px] opacity-70">{{ tp('totp.backup.left', totpStatus.backupCodesLeft) }}</p>
+                            <input v-model="totpForm.password" type="password" :placeholder="t('security.current')" class="h-9 w-full rounded-lg border px-3 text-xs bg-transparent" />
+                            <input v-model="totpForm.code" autocomplete="one-time-code" :placeholder="t('totp.codeOrBackup')" @keyup.enter="disableTotp" class="h-9 w-full rounded-lg border px-3 font-mono text-xs bg-transparent" />
+                            <button @click="disableTotp" class="w-full h-9 rounded-lg border border-[#e11d48] text-xs font-semibold text-[#e11d48]">{{ t('totp.disable') }}</button>
+                        </template>
+                        <template v-else-if="totpStatus.loaded">
+                            <input v-model="totpForm.password" type="password" :placeholder="t('security.current')" @keyup.enter="startTotpSetup" class="h-9 w-full rounded-lg border px-3 text-xs bg-transparent" />
+                            <button @click="startTotpSetup" class="w-full h-9 rounded-lg bg-[#315bd7] text-xs font-semibold text-white">{{ t('totp.enable') }}</button>
+                        </template>
+                    </div>
                     <div class="pt-3 border-t border-black/10 dark:border-white/10">
                         <label class="flex items-center justify-between gap-3 text-xs font-semibold opacity-60">
                             <span>{{ t('security.siteIcons') }}</span>
