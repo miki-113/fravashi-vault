@@ -15,3 +15,4 @@ aegis_vault_backup*.json
 fravashi_recovery_key*.txt
 aegis_recovery_key*.txt
 .claude/
+node_modules/

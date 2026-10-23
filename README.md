@@ -59,7 +59,6 @@ Backend: Rust (Axum, SQLite). Frontend: Vue, no build step for the JavaScript.
   - a compromised or malicious server: the JavaScript is delivered by the server on every visit, so a modified server could ship code that steals your password. Self-hosting on your own hardware reduces but does not remove this;
   - a lost master password together with a lost recovery key: there is no other way back;
   - the exported JSON file, which is **not** encrypted and contains all passwords;
-  - script injection, only partly: the Content Security Policy contains `unsafe-eval` because the Vue templates are compiled in the browser from the page (in-DOM templates). See Roadmap;
   - an unlocked app: while it is open, the decrypted vault key lives in the browser's memory.
 - **No independent security audit has been performed.** Only a self-review exists ([AUDIT.md](AUDIT.md)).
 - HTTPS is mandatory. Run the service only behind a reverse proxy with a valid certificate.
@@ -116,7 +115,7 @@ The order is not a promise.
 - planned: quick unlock with Face ID / Touch ID / Windows Hello / passkey (WebAuthn PRF)
 - done: loyalty cards with a barcode / QR code (EAN-13, EAN-8, Code 128, Code 39, QR); the extension skips them
 - planned: filling `<select>` expiry lists and split card number fields in the extension
-- planned: remove `unsafe-eval` from the Content Security Policy (precompiled templates)
+- done: no `unsafe-eval` in the Content Security Policy: the Vue template is precompiled (`static/app-render.js`) and the page uses the runtime-only Vue build
 - planned: count metadata in the quota
 - **Not planned:** in-store payments (NFC). This is a password manager, not a wallet.
 
@@ -165,6 +164,15 @@ node --test tests/*.mjs
 ```
 
 The binary serves `index.html` and the `static/` directory from its working directory.
+
+After changing the markup inside `<div id="app">` in `index.html`, rebuild the precompiled template and commit `static/app-render.js` (Node.js is needed only for this step, not for Docker or running the server):
+
+```sh
+npm install
+npm run build:templates
+```
+
+`node --test` fails if `static/app-render.js` is out of date.
 
 ## Backup and restore
 

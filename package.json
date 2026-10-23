@@ -1,0 +1,13 @@
+{
+  "name": "fravashi-vault-tools",
+  "private": true,
+  "description": "Инструменты разработки: предкомпиляция шаблона Vue. В образ и на NAS не попадают.",
+  "scripts": {
+    "build:templates": "node tools/compile-templates.mjs",
+    "test": "node --test \"tests/*.mjs\""
+  },
+  "devDependencies": {
+    "@vue/compiler-dom": "3.3.4",
+    "vue": "3.3.4"
+  }
+}

@@ -11,3 +11,8 @@ CLAUDE.md
 .env.*
 tailwind.config.js
 static/input.css
+node_modules/
+tools/
+tests/
+package.json
+package-lock.json

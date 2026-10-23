@@ -1,6 +1,6 @@
 // Версия сборки: кэш браузера чистится только при смене версии (иначе ломается офлайн-запуск).
 // При каждом обновлении файла на сервере увеличивайте это значение.
-const APP_BUILD = "2026-10-23-11";
+const APP_BUILD = "2026-10-23-12";
 
 // Миграция localStorage после переименования проекта (aegis_* → fravashi_*).
 // Выполняется до любых чтений. offline_auth_* / offline_vault_* имён не меняли, офлайн-копия сохраняется.
@@ -607,6 +607,9 @@ async function generateTOTP(secretBase32) {
 }
 
 createApp({
+    // Шаблон #app из index.html, заранее скомпилированный в static/app-render.js (npm run build:templates):
+    // runtime-only сборка Vue не компилирует шаблоны в браузере, поэтому CSP обходится без 'unsafe-eval'.
+    render: window.FravashiRender,
     setup() {
         const loading = ref(true);
         const hasUsers = ref(false);

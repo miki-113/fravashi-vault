@@ -52,3 +52,7 @@
 - Бэкапы data: E:\Backups\my-vault\data-2026-10-23f (последний, перед выкладкой).
 - Старые vault.db* на NAS держим до ~28.10.2026.
 - Дальше: дисконтные карты со штрихкодом, убрать unsafe-eval из CSP, выкладка без пересборки (GHCR или том static).
+
+## Статус 2026-10-23 (CSP без unsafe-eval, не выложено)
+- Шаблон #app из index.html предкомпилирован в static/app-render.js, Vue — runtime-only (vue.runtime.global.prod.js), в CSP нет 'unsafe-eval'. APP_BUILD 2026-10-23-12.
+- После правки разметки внутри <div id="app">: `npm install` (один раз), затем `npm run build:templates` и закоммитить static/app-render.js. Тест tests/app-render.test.mjs падает при рассинхроне. Node нужен только разработчику, в образ не попадает (.dockerignore).

@@ -1,6 +1,6 @@
 # Third-party notices / Сторонние компоненты
 
-FravashiVault itself is licensed under AGPL-3.0-or-later (see [LICENSE](LICENSE)). It bundles or depends on the components below, each under its own license. Versions were taken from the headers of the files in `static/vendor`, from `tailwind.config.js`, from `AUDIT.md` (qrcode-generator) and from `Cargo.lock`. Where no version could be established it says "not recorded" (Inter and JetBrains Mono: the font files and `fonts.css` carry no version, and no package manifest is kept in the repository).
+FravashiVault itself is licensed under AGPL-3.0-or-later (see [LICENSE](LICENSE)). It bundles or depends on the components below, each under its own license. Versions were taken from the headers of the files in `static/vendor`, from `tailwind.config.js`, from `AUDIT.md` (qrcode-generator) and from `Cargo.lock`. Where no version could be established it says "not recorded" (Inter and JetBrains Mono: the font files and `fonts.css` carry no version, and no package manifest records them).
 
 Сам FravashiVault распространяется по AGPL-3.0 (см. [LICENSE](LICENSE)). Ниже — компоненты, которые входят в проект или от которых он зависит; у каждого своя лицензия.
 
@@ -8,7 +8,8 @@ FravashiVault itself is licensed under AGPL-3.0-or-later (see [LICENSE](LICENSE)
 
 | Component | Version | License | Where |
 |---|---|---|---|
-| [Vue](https://github.com/vuejs/core) | 3.3.4 | MIT | `static/vendor/vue.global.prod.js` |
+| [Vue](https://github.com/vuejs/core) | 3.3.4 | MIT | `static/vendor/vue.runtime.global.prod.js` (runtime-only build) |
+| [@vue/compiler-dom](https://github.com/vuejs/core) | 3.3.4 (development only, `package.json`; not shipped) | MIT | `tools/compile-templates.mjs` generates `static/app-render.js` from `index.html` |
 | [PapaParse](https://github.com/mholt/PapaParse) | 5.4.1 | MIT | `static/vendor/papaparse.min.js` |
 | [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (Kazuhiko Arase, © 2009) | 1.4.4 (as recorded in AUDIT.md; the file header has no version) | MIT | `static/vendor/qrcode.js` |
 | [JsBarcode](https://github.com/lindell/JsBarcode) (© Johan Lindell) | 3.11.6 | MIT | `static/vendor/JsBarcode.all.min.js` (loyalty card barcodes) |

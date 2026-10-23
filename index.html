@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="/static/vendor/fonts/fonts.css">
     <link rel="stylesheet" href="/static/vendor/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="/static/app.css">
-    <script src="/static/vendor/vue.global.prod.js"></script>
+    <script src="/static/vendor/vue.runtime.global.prod.js"></script>
     <script src="/static/vendor/papaparse.min.js"></script>
     <script src="/static/vendor/qrcode.js"></script>
     <script src="/static/vendor/JsBarcode.all.min.js"></script>
@@ -820,7 +820,6 @@
                                                 <i class="fa-regular fa-copy text-xs opacity-60"></i>
                                             </div>
                                         </template>
-                                        </div>
                                     </div>
 
                                     <div v-if="activeCardData.note || selectedItem.decrypted.itemType === 'note'" :class="['rounded-xl border p-4 whitespace-pre-wrap text-[13px] leading-relaxed', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#dfe5f3] bg-[#f8faff]']">
@@ -1612,6 +1611,7 @@
         </div>
     </div>
 <!-- КОНЕЦ ЧАСТИ 1 -->
+<script src="/static/app-render.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

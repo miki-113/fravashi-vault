@@ -35,7 +35,7 @@
 
 - Vue 3.3.4, PapaParse 5.4.1, qrcode-generator 1.4.4, JsBarcode 3.11.6, Font Awesome 6.4.0 (только woff2), Inter и JetBrains Mono (woff2, латиница+кириллица) лежат в `static/vendor/`. Tailwind 3.4.17 собран в `static/app.css`; исходники: `tailwind.config.js`, `static/input.css` (команда сборки в первой строке конфига).
 - Inline-скрипт вынесен в `static/app.js`, inline-стили — в `static/input.css`. Inline-обработчиков `on*` не было. `/static/*` отдаёт `tower_http::ServeDir` (без листинга, `..` даёт 404).
-- CSP: `script-src self unsafe-eval; style-src self; style-src-attr unsafe-inline; font-src self; img-src self data: blob:; connect-src self https://api.pwnedpasswords.com`. Остались послабления: `unsafe-eval` (Vue компилирует in-DOM шаблоны; переход на runtime-only с прекомпиляцией даст строгий script-src без eval, но требует вынести шаблон в SFC/сборщик (появится npm-сборка) — не делали) и `unsafe-inline` только для атрибутов `style`.
+- CSP (обновлено 2026-10-23: `unsafe-eval` убран — шаблон предкомпилирован в `static/app-render.js` через `tools/compile-templates.mjs`, страница на runtime-only Vue; ниже исходная запись): `script-src self unsafe-eval; style-src self; style-src-attr unsafe-inline; font-src self; img-src self data: blob:; connect-src self https://api.pwnedpasswords.com`. Остались послабления: `unsafe-eval` (Vue компилирует in-DOM шаблоны; переход на runtime-only с прекомпиляцией даст строгий script-src без eval, но требует вынести шаблон в SFC/сборщик (появится npm-сборка) — не делали) и `unsafe-inline` только для атрибутов `style`.
 - Service worker: кэш `aegis-pwa-<APP_BUILD>` (`/sw.js?v=`), предзагрузка локальных файлов, старые кэши удаляются при активации.
 - Бэкенд: `no-store` на /api/*, CORS убран, лимиты длины полей и числа записей.
 - Не проверено в браузере (консоль, CSP-нарушения, офлайн-режим).
@@ -51,7 +51,7 @@
 - `requirements.txt` удалён. В `index.html` добавлен `mobile-web-app-capable`.
 - `cargo test`: 31 тест, ошибок и предупреждений нет.
 
-Не сделано / открыто: любой участник может занять всю общую семейную квоту (отдельных лимитов на участника нет); смена пароля админом (`recover-member`) без лимита по IP; квота не учитывает метаданные записей (категория, iv); `unsafe-eval` в CSP; браузерная проверка этапа 3.
+Не сделано / открыто: любой участник может занять всю общую семейную квоту (отдельных лимитов на участника нет); смена пароля админом (`recover-member`) без лимита по IP; квота не учитывает метаданные записей (категория, iv); `unsafe-eval` в CSP (закрыто 2026-10-23); браузерная проверка этапа 3.
 
 ### Перед публикацией на GitHub: личные данные
 

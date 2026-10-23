@@ -692,9 +692,9 @@ async fn verify_auth_key_async(state: &AppState, auth_key: &str, verifier: &str)
 }
 
 // Защитные заголовки на все ответы.
-// Оставшиеся послабления CSP: 'unsafe-eval' в script-src (Vue компилирует in-DOM шаблоны через new Function)
-// и 'unsafe-inline' только для атрибутов style (style-src-attr).
-const CSP: &str = "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://api.pwnedpasswords.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+// Шаблон Vue предкомпилирован (static/app-render.js), поэтому 'unsafe-eval' не нужен.
+// Оставшееся послабление CSP: 'unsafe-inline' только для атрибутов style (style-src-attr).
+const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://api.pwnedpasswords.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 
 async fn security_headers_middleware(req: Request, next: Next) -> Response {
     let is_api = req.uri().path().starts_with("/api/");
@@ -2322,9 +2322,9 @@ const PRECACHE = [
     '/', '/manifest.json',
     '/static/icons/icon.svg', '/static/icons/favicon.svg', '/static/icons/favicon-32.png', '/static/icons/apple-touch-icon.png',
     '/static/icons/icon-192.png', '/static/icons/icon-512.png', '/static/icons/icon-maskable-192.png', '/static/icons/icon-maskable-512.png',
-    '/static/app.js', '/static/import-json.js', '/static/discount.js', '/static/vault-sync.js', '/static/extension-build.js', '/static/app.css',
+    '/static/app.js', '/static/app-render.js', '/static/import-json.js', '/static/discount.js', '/static/vault-sync.js', '/static/extension-build.js', '/static/app.css',
     '/static/i18n/ru.js', '/static/i18n/en.js',
-    '/static/vendor/vue.global.prod.js', '/static/vendor/papaparse.min.js', '/static/vendor/qrcode.js', '/static/vendor/JsBarcode.all.min.js',
+    '/static/vendor/vue.runtime.global.prod.js', '/static/vendor/papaparse.min.js', '/static/vendor/qrcode.js', '/static/vendor/JsBarcode.all.min.js',
     '/static/vendor/fonts/fonts.css', '/static/vendor/fontawesome/css/all.min.css',
     '/static/vendor/fontawesome/webfonts/fa-solid-900.woff2',
     '/static/vendor/fontawesome/webfonts/fa-regular-400.woff2',
@@ -2908,6 +2908,7 @@ mod tests {
                 h[header::CONTENT_SECURITY_POLICY].to_str().unwrap().contains("frame-ancestors 'none'"),
                 "{uri}"
             );
+            assert!(!h[header::CONTENT_SECURITY_POLICY].to_str().unwrap().contains("unsafe-eval"), "{uri}");
             assert_eq!(h[header::X_FRAME_OPTIONS], "DENY");
             assert_eq!(h[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
             assert_eq!(h[header::REFERRER_POLICY], "no-referrer");
