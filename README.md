@@ -10,7 +10,7 @@ Backend: Rust (Axum, SQLite). Frontend: Vue, no build step for the JavaScript.
 
 ## Features
 
-- Item types: logins, bank cards, notes, Wi-Fi networks (with a scannable QR code); several sub-accounts under one item, custom fields, password history, favourites, folders, trash
+- Item types: logins, bank cards, loyalty cards (barcode / QR code, full screen for the checkout), notes, Wi-Fi networks (with a scannable QR code); several sub-accounts under one item, custom fields, password history, favourites, folders, trash
 - One-time codes (TOTP): the secret is stored inside the encrypted item, the code is computed in the browser
 - Password generator and a duplicate / weak password overview
 - Password breach check via Have I Been Pwned using k-anonymity (only the first 5 characters of the SHA-1 hash are sent to `api.pwnedpasswords.com`)
@@ -83,7 +83,7 @@ Optional and per user. Users who do not turn it on sign in exactly as before.
 
 ## Browser extension
 
-Generated in the browser when you press "Download fravashi-extension.zip" (`static/extension-build.js`) and installed as an unpacked extension in Chromium-based desktop browsers. The server address and the window language are taken from the app at the moment of download; if that language is missing, the browser language is used. Version 1.3.1.
+Generated in the browser when you press "Download fravashi-extension.zip" (`static/extension-build.js`) and installed as an unpacked extension in Chromium-based desktop browsers. The server address and the window language are taken from the app at the moment of download; if that language is missing, the browser language is used. Version 1.3.2.
 
 **Permissions** (`manifest.json`):
 
@@ -114,7 +114,7 @@ The order is not a promise.
 - done: browser extension 1.3.1 — English interface, narrow permissions (`activeTab`, `scripting`, the server address only), bank card autofill with confirmation, see [Browser extension](#browser-extension)
 - deferred on purpose: browser extension session ("stay unlocked for N minutes"). For now the extension asks for the master password (and the code, if two-factor sign-in is on) every time its window is opened
 - planned: quick unlock with Face ID / Touch ID / Windows Hello / passkey (WebAuthn PRF)
-- planned: loyalty cards with a barcode / QR code
+- done: loyalty cards with a barcode / QR code (EAN-13, EAN-8, Code 128, Code 39, QR); the extension skips them
 - planned: filling `<select>` expiry lists and split card number fields in the extension
 - planned: remove `unsafe-eval` from the Content Security Policy (precompiled templates)
 - planned: count metadata in the quota

@@ -7,7 +7,7 @@
     const MAX_FILE_BYTES = 20 * 1024 * 1024;
     const MAX_ITEMS = 5000;
     const MAX_ITEM_PLAIN_BYTES = 190000; // сервер принимает шифртекст до 400 000 hex-символов (200 000 байт открытого текста)
-    const ITEM_TYPES = ["login", "card", "wifi", "note"];
+    const ITEM_TYPES = ["login", "card", "wifi", "note", "discount"];
     const SCOPES = ["personal", "family"];
     const LIMITS = {
         title: 500, url: 2048, username: 500, password: 2048, totpSecret: 512, note: 20000, folder: 64,
@@ -143,7 +143,7 @@
     }
 
     function summarize(items) {
-        const s = { total: items.length, personal: 0, family: 0, login: 0, card: 0, wifi: 0, note: 0, multi: 0, favorites: 0 };
+        const s = { total: items.length, personal: 0, family: 0, login: 0, card: 0, wifi: 0, note: 0, discount: 0, multi: 0, favorites: 0 };
         for (const it of items) {
             s[it.scope]++;
             s[it.data.itemType]++;

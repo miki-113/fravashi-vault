@@ -20,7 +20,9 @@
     <script src="/static/vendor/vue.global.prod.js"></script>
     <script src="/static/vendor/papaparse.min.js"></script>
     <script src="/static/vendor/qrcode.js"></script>
+    <script src="/static/vendor/JsBarcode.all.min.js"></script>
     <script src="/static/import-json.js"></script>
+    <script src="/static/discount.js"></script>
     <script src="/static/vault-sync.js"></script>
     <script src="/static/extension-build.js"></script>
     <script src="/static/i18n/ru.js"></script>
@@ -319,6 +321,12 @@
                                 <span class="text-[10px] text-[#c6d3f2]">{{ countByCategory('card') }}</span>
                             </button>
 
+                            <button @click="setFilter('all', 'discount', 'all')" :class="['flex h-8.5 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[11.5px] transition-colors', (currentCategory === 'discount' && rightPaneMode === 'item') ? 'bg-[#496fe8] font-semibold text-white' : 'text-[#d3def8] hover:bg-white/[0.09]']">
+                                <span class="grid h-6 w-6 place-items-center rounded-md bg-[#ffb8d9] text-[#7a2a52]"><i class="fa-solid fa-barcode text-[11px]"></i></span>
+                                <span class="flex-1 truncate">{{ t('nav.discount') }}</span>
+                                <span class="text-[10px] text-[#c6d3f2]">{{ countByCategory('discount') }}</span>
+                            </button>
+
                             <button @click="setFilter('all', 'note', 'all')" :class="['flex h-8.5 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[11.5px] transition-colors', (currentCategory === 'note' && rightPaneMode === 'item') ? 'bg-[#496fe8] font-semibold text-white' : 'text-[#d3def8] hover:bg-white/[0.09]']">
                                 <span class="grid h-6 w-6 place-items-center rounded-md bg-[#ffd875] text-[#67511a]"><i class="fa-regular fa-note-sticky text-[11px]"></i></span>
                                 <span class="flex-1 truncate">{{ t('nav.notes') }}</span>
@@ -499,6 +507,7 @@
                                               :style="{ backgroundColor: getEntryColorHex(item.decrypted.title) }">
                                             <i v-if="item.decrypted.itemType === 'note'" class="fa-regular fa-note-sticky"></i>
                                             <i v-else-if="item.decrypted.itemType === 'card'" class="fa-regular fa-credit-card"></i>
+                                            <i v-else-if="item.decrypted.itemType === 'discount'" class="fa-solid fa-barcode"></i>
                                             <i v-else-if="item.decrypted.itemType === 'wifi'" class="fa-solid fa-wifi text-xs"></i>
                                             <template v-else>
                                                 <span>{{ getInitials(decodePunycodeText(item.decrypted.title)) }}</span>
@@ -570,6 +579,7 @@
                                          :style="{ backgroundColor: getEntryColorHex(selectedItem.decrypted.title) }">
                                         <i v-if="selectedItem.decrypted.itemType === 'note'" class="fa-regular fa-note-sticky"></i>
                                         <i v-else-if="selectedItem.decrypted.itemType === 'card'" class="fa-regular fa-credit-card"></i>
+                                        <i v-else-if="selectedItem.decrypted.itemType === 'discount'" class="fa-solid fa-barcode"></i>
                                         <i v-else-if="selectedItem.decrypted.itemType === 'wifi'" class="fa-solid fa-wifi"></i>
                                         <template v-else>
                                             <span>{{ getInitials(decodePunycodeText(selectedItem.decrypted.title)) }}</span>
@@ -681,8 +691,37 @@
                                         </div>
                                     </div>
 
+                                    <!-- Дисконтная карта: штрихкод/QR на белом фоне с тихой зоной, номер под ним -->
+                                    <div v-if="selectedItem.decrypted.itemType === 'discount'" :class="['rounded-xl border p-4', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#dfe5f3] bg-[#f8faff]']">
+                                        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                            <div :class="['text-[10px] font-semibold uppercase tracking-[0.14em]', theme === 'dark' ? 'text-[#aab9dc]' : 'text-[#7182aa]']">{{ t('discount.format.' + discountCode.format) }}</div>
+                                            <div class="flex gap-2">
+                                                <button v-if="activeCardData.username" @click="copyText(activeCardData.username, false)" class="flex h-8 items-center gap-1.5 rounded-lg border border-[#315bd7]/30 px-3 text-[11px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
+                                                    <i class="fa-regular fa-copy text-[10px]"></i> {{ t('discount.copyNumber') }}
+                                                </button>
+                                                <button v-if="discountCode.svg" @click="openDiscountFullscreen" class="flex h-8 items-center gap-1.5 rounded-lg bg-[#315bd7] px-3 text-[11px] font-semibold text-white shadow-xs">
+                                                    <i class="fa-solid fa-expand text-[10px]"></i> {{ t('discount.fullscreen') }}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div v-if="discountCode.svg" class="mx-auto max-w-[420px] rounded-lg bg-white p-2 text-center text-black">
+                                            <div v-html="discountCode.svg" :class="['mx-auto', discountCode.format === 'qr' ? 'max-w-[240px]' : '']"></div>
+                                            <div class="mt-1 break-all font-mono text-[15px] font-semibold tracking-[0.16em]">{{ discountCode.value }}</div>
+                                        </div>
+                                        <div v-else class="flex items-start gap-2 rounded-lg border border-dashed border-[#f59e0b] p-3 text-[12px] text-[#b45309] dark:text-[#fbbf24]">
+                                            <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
+                                            <div>
+                                                <div>{{ discountErrorText(discountCode) }}</div>
+                                                <div v-if="activeCardData.username" class="mt-1 break-all font-mono text-[13px] font-semibold">{{ activeCardData.username }}</div>
+                                            </div>
+                                        </div>
+                                        <div v-if="discountExtra.expiry" :class="['mt-3 text-[11px]', theme === 'dark' ? 'text-[#c3cfea]' : 'text-[#5d6f96]']">
+                                            <i class="fa-regular fa-calendar text-[10px]"></i> {{ t('discount.validUntil', { date: discountExtra.expiry }) }}
+                                        </div>
+                                    </div>
+
                                     <!-- Быстрые кнопки копирования -->
-                                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                                    <div v-if="selectedItem.decrypted.itemType !== 'discount'" class="flex items-center justify-between gap-2 flex-wrap">
                                         <div :class="['text-[10px] font-semibold uppercase tracking-[0.14em]', theme === 'dark' ? 'text-[#aab9dc]' : 'text-[#7182aa]']">{{ t(selectedItem.decrypted.itemType === 'card' ? 'item.cardData' : 'item.credentials') }}</div>
                                         <div class="flex gap-2">
                                             <button v-if="activeCardData.username" @click="copyText(activeCardData.username, false)" class="flex h-8 items-center gap-1.5 rounded-lg border border-[#315bd7]/30 px-3 text-[11px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
@@ -695,7 +734,7 @@
                                     </div>
 
                                     <!-- Поля Логин / Пароль / 2FA -->
-                                    <div v-if="selectedItem.decrypted.itemType !== 'note'" :class="['overflow-hidden rounded-xl border', theme === 'dark' ? 'border-[#3a4b70]' : 'border-[#dfe5f3]']">
+                                    <div v-if="!['note', 'discount'].includes(selectedItem.decrypted.itemType)" :class="['overflow-hidden rounded-xl border', theme === 'dark' ? 'border-[#3a4b70]' : 'border-[#dfe5f3]']">
                                         <div :class="['px-4 py-3 sm:px-5', theme === 'dark' ? 'border-b border-[#3a4b70] bg-[#202e4b]' : 'border-b border-[#e5eaf6] bg-[#f8faff]']">
                                             <div class="mb-1 flex items-center justify-between">
                                                 <label :class="['text-[9.5px] font-semibold uppercase tracking-[0.12em]', theme === 'dark' ? 'text-[#aab9dc]' : 'text-[#7586ad]']">
@@ -753,10 +792,11 @@
                                     </div>
 
                                     <!-- Дополнительные поля (Custom Fields) -->
-                                    <div v-if="selectedItem.decrypted.customFields && selectedItem.decrypted.customFields.length > 0"
+                                    <div v-if="visibleCustomFieldCount > 0"
                                          :class="['rounded-xl border overflow-hidden', theme === 'dark' ? 'border-[#3a4b70]' : 'border-[#dfe5f3]']">
                                         <template v-for="(cf, idx) in selectedItem.decrypted.customFields" :key="idx">
-                                            <div v-if="isSecretFieldLabel(cf.label)"
+                                            <template v-if="isHiddenCustomField(cf)"></template>
+                                            <div v-else-if="isSecretFieldLabel(cf.label)"
                                                  :class="['px-4 py-2.5 flex items-center justify-between gap-2 border-b last:border-b-0', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#e5eaf6] bg-[#f8faff]']">
                                                 <div class="min-w-0">
                                                     <div class="text-[9.5px] font-semibold uppercase opacity-70">{{ cf.label }}</div>
@@ -790,7 +830,7 @@
 
                                     <!-- Нижние карточки: Сайт + Безопасность -->
                                     <div class="grid gap-3 sm:grid-cols-2">
-                                        <div v-if="selectedItem.decrypted.itemType !== 'card'" :class="['rounded-xl border p-3.5', theme === 'dark' ? 'border-[#475680] bg-[#222f4e]' : 'border-[#dbe4fb] bg-[#f1f5ff]']">
+                                        <div v-if="!['card', 'discount'].includes(selectedItem.decrypted.itemType)" :class="['rounded-xl border p-3.5', theme === 'dark' ? 'border-[#475680] bg-[#222f4e]' : 'border-[#dbe4fb] bg-[#f1f5ff]']">
                                             <div class="mb-1.5 flex items-center gap-2">
                                                 <i class="fa-solid fa-globe text-xs text-[#4f70d5]"></i>
                                                 <span class="text-[9.5px] font-semibold uppercase opacity-75">{{ t('item.site') }}</span>
@@ -1136,6 +1176,7 @@
                             <select v-model="itemForm.itemType" @change="onItemTypeChange" :class="['mt-1 h-9 w-full rounded-lg border px-2 text-[11px] outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']">
                                 <option value="login">{{ t('item.type.login') }}</option>
                                 <option value="card">{{ t('item.type.card') }}</option>
+                                <option value="discount">{{ t('item.type.discount') }}</option>
                                 <option value="wifi">{{ t('item.type.wifi') }}</option>
                                 <option value="note">{{ t('item.type.note') }}</option>
                             </select>
@@ -1183,6 +1224,25 @@
                         <label class="mb-3 block text-[10.5px] font-semibold">{{ t('item.card.pin') }}
                             <input :type="showModalPwd ? 'text' : 'password'" :value="cardForm.pin" @input="onCardPinInput" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="••••" :class="['font-mono mt-1 h-10 w-full rounded-lg border px-3 text-[12px] font-normal outline-none focus:border-[#6d8df0]', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
                         </label>
+                    </template>
+
+                    <!-- Дисконтная карта: номер → username, формат и срок → доп. поля barcodeFormat/validUntil -->
+                    <template v-else-if="itemForm.itemType === 'discount'">
+                        <label class="mb-3 block text-[10.5px] font-semibold">{{ t('item.discount.number') }}
+                            <input v-model="itemForm.username" autocomplete="off" placeholder="4600000000000" :class="['font-mono mt-1 h-10 w-full rounded-lg border px-3 text-[12px] font-normal outline-none focus:border-[#6d8df0]', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                            <p v-if="discountCheck && discountCheck.error" class="mt-1 text-[10px] font-normal text-[#b45309] dark:text-[#fbbf24]">{{ discountErrorText(discountCheck) }}</p>
+                            <p v-else-if="discountCheck" :class="['mt-1 text-[10px] font-normal', theme === 'dark' ? 'text-[#aab8d5]' : 'text-[#7281a4]']">{{ t('item.discount.willShowAs', { format: t('discount.format.' + discountCheck.format) }) }}</p>
+                        </label>
+                        <div class="mb-3 grid grid-cols-2 gap-2">
+                            <label class="block text-[10.5px] font-semibold">{{ t('item.discount.format') }}
+                                <select v-model="discountForm.format" :class="['mt-1 h-10 w-full rounded-lg border px-2 text-[12px] font-normal outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']">
+                                    <option v-for="f in ['auto', 'ean13', 'ean8', 'code128', 'code39', 'qr']" :key="f" :value="f">{{ t('discount.format.' + f) }}</option>
+                                </select>
+                            </label>
+                            <label class="block text-[10.5px] font-semibold">{{ t('item.discount.expiry') }}
+                                <input v-model="discountForm.expiry" autocomplete="off" maxlength="20" :placeholder="t('item.discount.expiryPlaceholder')" :class="['mt-1 h-10 w-full rounded-lg border px-3 text-[12px] font-normal outline-none focus:border-[#6d8df0]', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                            </label>
+                        </div>
                     </template>
 
                     <template v-else-if="itemForm.itemType !== 'note'">
@@ -1314,6 +1374,16 @@
                 </div>
             </div>
 
+            <!-- КОД ДИСКОНТНОЙ КАРТЫ НА ВЕСЬ ЭКРАН (для кассы): белый фон, максимальный размер -->
+            <div v-if="discountFullscreen && discountCode && discountCode.svg" ref="discountFullscreenRef" class="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 overflow-auto bg-white p-6 text-black">
+                <div class="text-[18px] font-bold">{{ decodePunycodeText(selectedItem.decrypted.title) }}</div>
+                <div v-html="discountCode.svg" :class="['w-full', discountCode.format === 'qr' ? 'max-w-[min(80vw,70vh)]' : 'max-w-[900px]']"></div>
+                <div class="break-all text-center font-mono text-[24px] font-semibold tracking-[0.2em]">{{ discountCode.value }}</div>
+                <button @click="closeDiscountFullscreen" class="mt-2 h-10 rounded-lg border border-[#d8e0f3] px-5 text-[13px] font-semibold text-[#263756]">
+                    <i class="fa-solid fa-xmark"></i> {{ t('common.close') }}
+                </button>
+            </div>
+
             <!-- УСТАНОВКА PWA: инструкции для iPhone, Android и ПК -->
             <div v-if="showPwaModal" class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" @mousedown.self="showPwaModal = false">
                 <div :class="['w-full max-w-lg max-h-[88dvh] overflow-y-auto rounded-2xl border p-6 space-y-3', theme === 'dark' ? 'border-[#3c4e73] bg-[#202d49]' : 'border-[#dce3f4] bg-[#fffefa]']">
@@ -1375,7 +1445,7 @@
                         <div v-if="jsonPreview" class="rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] p-2 text-xs space-y-0.5">
                             <div class="font-semibold text-[#329371]">{{ t('import.preview.total', { n: jsonPreview.stats.total }) }}<span v-if="jsonPreview.skipped" class="opacity-70 font-normal"> ({{ t('import.preview.skipped', { n: jsonPreview.skipped }) }})</span></div>
                             <div>{{ t('import.preview.scopes', { personal: jsonPreview.stats.personal, family: jsonPreview.stats.family }) }}</div>
-                            <div>{{ t('import.preview.types', { login: jsonPreview.stats.login, card: jsonPreview.stats.card, wifi: jsonPreview.stats.wifi, note: jsonPreview.stats.note }) }}</div>
+                            <div>{{ t('import.preview.types', { login: jsonPreview.stats.login, card: jsonPreview.stats.card, discount: jsonPreview.stats.discount, wifi: jsonPreview.stats.wifi, note: jsonPreview.stats.note }) }}</div>
                             <div>{{ t('import.preview.multi', { n: jsonPreview.stats.multi }) }}<span v-if="jsonPreview.customFolders.length"> · {{ t('import.preview.folders', { n: jsonPreview.customFolders.length }) }}</span></div>
                         </div>
                         <label v-if="jsonFamilyMissing" class="flex items-start gap-2 rounded-lg border border-[#d97706]/50 p-2 text-[11px] text-[#d97706]">

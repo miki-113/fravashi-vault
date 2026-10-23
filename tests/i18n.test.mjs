@@ -72,7 +72,7 @@ test("в index.html, app.js, import-json.js и extension-build.js нет кир�
     html.split("\n").forEach((l, i) => { if (CYR.test(l)) found.push(`index.html:${i + 1}: ${l.trim()}`); });
 
     let ignored = 0;
-    for (const f of ["static/app.js", "static/import-json.js", "static/extension-build.js"]) {
+    for (const f of ["static/app.js", "static/import-json.js", "static/discount.js", "static/extension-build.js"]) {
         // Блочных комментариев в этих файлах нет (а «*/*» встречается в строках), поэтому разбираются только «//»
         read(f).split("\n").forEach((l, i) => {
             if (l.includes("i18n-ignore")) {
@@ -111,7 +111,7 @@ test("ключи с динамическим суффиксом есть для 
         ...["ru", "en"].map((l) => `lang.name.${l}`),
         ...["login", "register", "recovery"].map((m) => `auth.title.${m}`),
         ...["shopping", "mail", "work", "finance", "social", "gov", "cloud"].map((f) => `folder.${f}`),
-        ...["all", "favorites", "login", "card", "wifi", "note", "apps", "trash", "weak", "reused"].map((c) => `title.category.${c}`),
+        ...["all", "favorites", "login", "card", "discount", "wifi", "note", "apps", "trash", "weak", "reused"].map((c) => `title.category.${c}`),
         ...["duplicates", "totp_hub", "watchtower", "home"].map((p) => `title.pane.${p}`),
     ];
     assert.deepEqual(need.filter((k) => !(k in ru)), []);

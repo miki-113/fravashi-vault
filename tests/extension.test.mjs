@@ -54,7 +54,7 @@ function loadPopup({ tabUrl = "https://x.test/", lang = "ru", reply = async () =
         crypto: globalThis.crypto, setTimeout() {}, URL, TextEncoder, TextDecoder, Uint8Array, JSON,
     };
     if (navigatorLang) sandbox.navigator = { language: navigatorLang };
-    const api = vm.runInNewContext(build(lang)["popup.js"] + ";({hostOf,hostMatches,fill,askCard,toItem,derive,tr,LANG})", sandbox);
+    const api = vm.runInNewContext(build(lang)["popup.js"] + ";({hostOf,hostMatches,fill,askCard,isFillable,toItem,derive,tr,LANG})", sandbox);
     // начальное состояние как в popup.html: сейф, поле кода и диалоги скрыты
     for (const id of ["username", "password", "statusBox", "totpCode"]) sandbox.document.getElementById(id);
     for (const id of ["totpBox", "vaultView", "confirmBox", "cardBox"]) sandbox.document.getElementById(id).classes.add("hidden");
@@ -83,12 +83,12 @@ function page(hostname, inputs) {
     };
 }
 
-test("манифест: версия 1.3.1, иконки, только activeTab и scripting, сеть — только сервер, без content_scripts", () => {
+test("манифест: версия 1.3.2, иконки, только activeTab и scripting, сеть — только сервер, без content_scripts", () => {
     const files = build("ru");
     const m = JSON.parse(files["manifest.json"]);
     assert.equal(m.manifest_version, 3);
-    assert.equal(m.version, "1.3.1");
-    assert.equal(ext.EXT_VERSION, "1.3.1");
+    assert.equal(m.version, "1.3.2");
+    assert.equal(ext.EXT_VERSION, "1.3.2");
     assert.deepEqual(m.permissions, ["activeTab", "scripting"]);
     assert.deepEqual(m.host_permissions, ["https://vault.test/*"]);
     for (const k of ["content_scripts", "optional_permissions", "optional_host_permissions", "background", "web_accessible_resources", "externally_connectable"]) {
@@ -272,6 +272,17 @@ test("toItem: номер, CVV, срок и владелец карты — из 
     assert.equal(toItem({ itemType: "login", username: "u", password: "p" }).kind, "login");
     // совпадение с регулярками приложения
     assert.deepEqual(plain(ext.cardExtra({ customFields: [{ label: "Expiry date", value: "1/30" }, { label: "Card holder", value: "X" }] })), { expiry: "1/30", holder: "X" });
+});
+
+test("в окно расширения не попадают заметки, дисконтные карты и удалённые записи", () => {
+    const { isFillable } = loadPopup().api;
+    assert.equal(isFillable({ itemType: "login" }), true);
+    assert.equal(isFillable({ itemType: "card" }), true);
+    assert.equal(isFillable({}), true, "старые записи без типа — логины");
+    assert.equal(isFillable({ itemType: "discount", username: "4006381333931" }), false);
+    assert.equal(isFillable({ itemType: "note" }), false);
+    assert.equal(isFillable({ itemType: "login", _trashed: true }), false);
+    assert.equal(isFillable(null), false);
 });
 
 const CARD = { kind: "card", title: "Visa", number: "4111111111111111", cvc: "321", holder: "ANNA I", expiry: "07/27" };

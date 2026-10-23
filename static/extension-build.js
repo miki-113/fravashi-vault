@@ -6,7 +6,7 @@
 (function (root) {
     "use strict";
 
-    const EXT_VERSION = "1.3.1";
+    const EXT_VERSION = "1.3.2";
     const DICT_PREFIX = "extension.popup.";
 
     // ---- Чистые функции (используются и приложением, и расширением) ----
@@ -272,6 +272,8 @@
             return JSON.parse(new TextDecoder().decode(d));
         } catch (e) { return null; }
     }
+    // В окно расширения не попадают заметки и дисконтные карты (заполнять на сайтах нечего)
+    function isFillable(o) { return !!o && !o._trashed && o.itemType !== "note" && o.itemType !== "discount"; }
     function toItem(o) {
         if (o.itemType === "card") {
             const ex = cardExtra(o);
@@ -287,7 +289,7 @@
         for (const it of (d.items || [])) {
             if (it.is_trashed) continue;
             const o = await dec(vk, it.ciphertext, it.iv);
-            if (o && !o._trashed && o.itemType !== "note") list.push(toItem(o));
+            if (isFillable(o)) list.push(toItem(o));
         }
         state.items = list;
         render();
@@ -380,7 +382,7 @@
     }
 
     const POPUP_FUNCS = [pickLang, tr, $, hostOf, hostMatches, tabHost, esc, msg, hideDialogs, ask, currentTab, runInTab, report, fill,
-        askCard, cardExtra, parseExpiry, bytesToHex, hexToBytes, derive, dec, toItem, loadVault, render, resetTotp, openVault, init];
+        askCard, cardExtra, parseExpiry, bytesToHex, hexToBytes, derive, dec, isFillable, toItem, loadVault, render, resetTotp, openVault, init];
 
     const POPUP_CSS = "*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;}body{width:350px;min-height:440px;max-height:560px;background:#17223a;color:#f1f5f9;display:flex;flex-direction:column;overflow:hidden;}.header{padding:12px 14px;background:#1d315b;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:space-between;font-weight:800;font-size:15px;}.container{padding:14px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}input{width:100%;padding:9px 11px;border-radius:8px;border:1px solid #364768;background:#202d49;color:#f8fafc;font-size:13px;outline:none;}input[readonly]{opacity:0.6;}.btn{cursor:pointer;padding:8px 12px;border-radius:8px;border:1px solid #364768;background:#202d49;color:#f8fafc;font-weight:600;font-size:12px;}.btn-primary{background:#315bd7;border-color:transparent;color:#fff;}.item-card{background:#202d49;border:1px solid #364768;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;}.dialog{margin:10px 14px 0;padding:10px;border-radius:10px;font-size:12px;display:flex;flex-direction:column;gap:8px;}.warn{border:1px solid #f59e0b;background:#3a2a10;color:#fde68a;}.info{border:1px solid #315bd7;background:#1d315b;color:#e2e8f0;}.row{display:flex;gap:6px;}.check{display:flex;align-items:center;gap:6px;}.check input{width:auto;}.hidden{display:none!important;}";
 

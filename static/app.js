@@ -1,6 +1,6 @@
 // Версия сборки: кэш браузера чистится только при смене версии (иначе ломается офлайн-запуск).
 // При каждом обновлении файла на сервере увеличивайте это значение.
-const APP_BUILD = "2026-10-23-10";
+const APP_BUILD = "2026-10-23-11";
 
 // Миграция localStorage после переименования проекта (aegis_* → fravashi_*).
 // Выполняется до любых чтений. offline_auth_* / offline_vault_* имён не меняли, офлайн-копия сохраняется.
@@ -35,7 +35,8 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-const { createApp, ref, computed, onMounted } = Vue;
+const { createApp, ref, computed, onMounted, nextTick } = Vue;
+const ITEM_TYPES = ["login", "card", "discount", "wifi", "note"];
 
 // Локализация: словари static/i18n/*.js подключаются до app.js и кладут себя в window.FRAVASHI_I18N[язык].
 // Язык — реактивный ref: шаблоны, вызывающие t(), перерисовываются при смене.
@@ -291,6 +292,41 @@ function luhnOk(d) {
 // Подписи доп. полей «Срок» и «Владелец» ищутся так же, как в расширении браузера (static/extension-build.js)
 function getCardExtra(data) {
     return window.FravashiExtension.cardExtra(data);
+}
+
+// Штрихкод дисконтной карты: SVG на белом фоне с тихой зоной (JsBarcode / qrcode-generator, всё локально).
+// Возвращает { format, value, svg } или { format, error, params } — код ошибки discount.err.*
+const JSBARCODE_FORMATS = { ean13: "EAN13", ean8: "EAN8", code128: "CODE128", code39: "CODE39" };
+const FIT_SVG = "display:block;width:100%;height:auto";
+function renderDiscountCode(number, format) {
+    const r = window.FravashiDiscount.resolveCode(number, format);
+    if (r.error) return r;
+    try {
+        if (r.format === "qr") {
+            if (typeof qrcode === "undefined") return { ...r, error: "render" };
+            const qr = qrcode(0, "M");
+            qr.addData(unescape(encodeURIComponent(r.value))); // UTF-8 побайтно: библиотека берёт младший байт символа
+            qr.make();
+            return { ...r, svg: qr.createSvgTag({ cellSize: 8, margin: 32, scalable: true }).replace("<svg ", '<svg style="' + FIT_SVG + '" ') };
+        }
+        if (typeof JsBarcode === "undefined") return { ...r, error: "render" };
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        let valid = true;
+        // Тихая зона: 12 модулей слева и справа (EAN требует 11/7, Code 128 и Code 39 — 10)
+        JsBarcode(svg, r.value, {
+            format: JSBARCODE_FORMATS[r.format], width: 2, height: 90, margin: 24, marginTop: 8, marginBottom: 8,
+            displayValue: false, flat: true, background: "#ffffff", lineColor: "#000000", valid: (v) => { valid = v; }
+        });
+        if (!valid) return { ...r, error: "render" };
+        const w = svg.getAttribute("width"), h = svg.getAttribute("height");
+        svg.setAttribute("viewBox", "0 0 " + parseFloat(w) + " " + parseFloat(h));
+        svg.removeAttribute("width");
+        svg.removeAttribute("height");
+        svg.setAttribute("style", FIT_SVG);
+        return { ...r, svg: svg.outerHTML };
+    } catch (e) {
+        return { ...r, error: "render" };
+    }
 }
 
 // Безопасный случайный индекс без смещения (rejection sampling)
@@ -843,6 +879,7 @@ createApp({
         const showModalPwd = ref(false);
         // Поля карты в форме: срок, владелец и ПИН хранятся в доп. полях записи (при сохранении собираются обратно)
         const cardForm = ref({ expiry: "", holder: "", pin: "", labels: {} });
+        const discountForm = ref({ format: "auto", expiry: "" });
         let formType = "login";
         const loginForm = ref({ username: "", password: "" });
         const regForm = ref({ username: "", password: "", passwordConfirm: "", inviteCode: "", setupToken: "", allowEscrow: true });
@@ -949,6 +986,33 @@ createApp({
         });
         const showSingleView = computed(() => !(isMultiCard.value && subCardsViewAll.value));
         const cardExtra = computed(() => getCardExtra(selectedItem.value?.decrypted));
+        const discountExtra = computed(() => window.FravashiDiscount.splitFields(selectedItem.value?.decrypted?.customFields));
+        const discountCode = computed(() => selectedItem.value?.decrypted?.itemType === "discount"
+            ? renderDiscountCode(activeCardData.value.username, discountExtra.value.format) : null);
+        // Формат и срок дисконтной карты показываются отдельно, в списке доп. полей их нет
+        function isHiddenCustomField(cf) {
+            return selectedItem.value?.decrypted?.itemType === "discount" && window.FravashiDiscount.isServiceField(cf);
+        }
+        const visibleCustomFieldCount = computed(() => (selectedItem.value?.decrypted?.customFields || []).filter((cf) => !isHiddenCustomField(cf)).length);
+        function discountErrorText(r) {
+            return t("discount.err." + r.error, { ...r.params, format: t("discount.format." + r.format) });
+        }
+
+        // Код на весь экран (для кассы): своё окно поверх всего + Fullscreen API и запрет гашения экрана, где они есть
+        const discountFullscreen = ref(false);
+        const discountFullscreenRef = ref(null);
+        let wakeLock = null;
+        async function openDiscountFullscreen() {
+            discountFullscreen.value = true;
+            await nextTick();
+            try { await discountFullscreenRef.value?.requestFullscreen?.(); } catch (e) { }
+            try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (e) { wakeLock = null; }
+        }
+        function closeDiscountFullscreen() {
+            discountFullscreen.value = false;
+            if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
+            if (wakeLock) { wakeLock.release().catch(() => { }); wakeLock = null; }
+        }
 
         function pwnedKey(idx) {
             return `${selectedItem.value?.id}_${idx}`;
@@ -995,7 +1059,7 @@ createApp({
             localStorage.setItem("fravashi_mockup_theme", newTheme);
         }
 
-        const CATEGORY_TITLES = ["all", "favorites", "login", "card", "wifi", "note", "apps", "trash", "weak", "reused"];
+        const CATEGORY_TITLES = ["all", "favorites", "login", "card", "discount", "wifi", "note", "apps", "trash", "weak", "reused"];
         const currentTitle = computed(() => {
             if (currentFolder.value !== "all") {
                 const fld = allFolders.value.find(f => f.id === currentFolder.value);
@@ -1129,7 +1193,7 @@ createApp({
         const duplicateGroups = computed(() => {
             const map = new Map();
             for (const it of activeItems.value) {
-                if (it.decrypted?.itemType === 'note') continue;
+                if (hasNoPassword(it)) continue;
                 let rootService = "";
                 if (isAndroidAppUrl(it.decrypted?.url)) {
                     rootService = resolveDomainFromAndroidPkg(extractAndroidPkg(it.decrypted.url), it.decrypted?.title || "");
@@ -1319,23 +1383,25 @@ createApp({
         const countFavorites = computed(() => activeItems.value.filter(i => i.is_favorite).length);
         const countByCategory = (cat) => activeItems.value.filter(i => (i.decrypted.itemType || 'login') === cat).length;
 
+        // Заметки и дисконтные карты без пароля: в проверки паролей и поиск дублей не входят
+        function hasNoPassword(item) { return ['note', 'discount'].includes(item.decrypted?.itemType); }
         function isWeakPassword(item) {
-            if (item.decrypted?.itemType === 'note') return false;
+            if (hasNoPassword(item)) return false;
             const p = item.decrypted?.password || "";
             return p.length > 0 && p.length < 10;
         }
         function isReusedPassword(item) {
-            if (item.decrypted?.itemType === 'note') return false;
+            if (hasNoPassword(item)) return false;
             const p = item.decrypted?.password || "";
             if (!p) return false;
-            return activeItems.value.filter(other => other.id !== item.id && other.decrypted?.itemType !== 'note' && other.decrypted?.password === p).length > 0;
+            return activeItems.value.filter(other => other.id !== item.id && !hasNoPassword(other) && other.decrypted?.password === p).length > 0;
         }
 
         const weakCount = computed(() => activeItems.value.filter(it => isWeakPassword(it)).length);
         const reusedCount = computed(() => activeItems.value.filter(it => isReusedPassword(it)).length);
 
         const securityScore = computed(() => {
-            const loginItems = activeItems.value.filter(i => i.decrypted?.itemType !== 'note');
+            const loginItems = activeItems.value.filter(i => !hasNoPassword(i));
             if (loginItems.length === 0) return 100;
             const bad = loginItems.filter(it => isWeakPassword(it) || isReusedPassword(it)).length;
             return Math.max(0, Math.round(((loginItems.length - bad) / loginItems.length) * 100));
@@ -1345,7 +1411,7 @@ createApp({
         const securityBreakdown = computed(() => {
             let weak = 0, reused = 0, good = 0;
             for (const it of activeItems.value) {
-                if (it.decrypted?.itemType === 'note') continue;
+                if (hasNoPassword(it)) continue;
                 if (isWeakPassword(it)) weak++;
                 else if (isReusedPassword(it)) reused++;
                 else good++;
@@ -1942,7 +2008,7 @@ createApp({
                 if (currentCategory.value === 'weak' && !isWeakPassword(it)) return false;
                 if (currentCategory.value === 'reused' && !isReusedPassword(it)) return false;
                 if (currentCategory.value === 'apps' && !isAndroidAppUrl(it.decrypted?.url)) return false;
-                if (['login', 'card', 'wifi', 'note'].includes(currentCategory.value) && (it.decrypted.itemType || 'login') !== currentCategory.value) return false;
+                if (ITEM_TYPES.includes(currentCategory.value) && (it.decrypted.itemType || 'login') !== currentCategory.value) return false;
 
                 if (searchQuery.value && searchQuery.value.trim()) {
                     const q = searchQuery.value.toLowerCase();
@@ -1981,38 +2047,50 @@ createApp({
                     subCards: Array.isArray(item.decrypted.subCards) ? JSON.parse(JSON.stringify(item.decrypted.subCards)) : []
                 };
                 formType = itemForm.value.itemType;
-                cardForm.value = { expiry: "", holder: "", pin: "", labels: {} };
-                if (formType === "card") moveCardFieldsToForm();
+                resetTypeForms();
+                moveTypeFieldsToForm(formType);
             } else {
                 editingItem.value = null;
                 itemForm.value = {
                     scope: currentView.value === 'family' ? 'family' : 'personal',
-                    itemType: ['login', 'card', 'wifi', 'note'].includes(currentCategory.value) ? currentCategory.value : 'login',
+                    itemType: ITEM_TYPES.includes(currentCategory.value) ? currentCategory.value : 'login',
                     folder: currentFolder.value !== 'all' ? currentFolder.value : '',
                     title: "", url: "", username: "", password: "", totpSecret: "", note: "", customFields: [], passwordHistory: [], subCards: []
                 };
                 formType = itemForm.value.itemType;
-                cardForm.value = { expiry: "", holder: "", pin: "", labels: {} };
+                resetTypeForms();
             }
             showItemModal.value = true;
         }
 
-        // Срок/владелец/ПИН карты: из доп. полей — в отдельные поля формы и обратно
-        function moveCardFieldsToForm() {
-            const { rest, ...own } = window.FravashiExtension.splitCardFields(itemForm.value.customFields);
-            cardForm.value = own;
-            itemForm.value.customFields = rest;
-        }
-        function moveCardFieldsToCustom() {
-            itemForm.value.customFields = window.FravashiExtension.joinCardFields({ ...cardForm.value, rest: itemForm.value.customFields });
+        function resetTypeForms() {
             cardForm.value = { expiry: "", holder: "", pin: "", labels: {} };
+            discountForm.value = { format: "auto", expiry: "" };
         }
-        // Смена типа в форме: поля карты переезжают между отдельными полями и доп. полями, ничего не теряется
+        // Срок/владелец/ПИН карты и формат/срок дисконтной карты: из доп. полей — в отдельные поля формы и обратно
+        function moveTypeFieldsToForm(type) {
+            if (type === "card") {
+                const { rest, ...own } = window.FravashiExtension.splitCardFields(itemForm.value.customFields);
+                cardForm.value = own;
+                itemForm.value.customFields = rest;
+            } else if (type === "discount") {
+                const { rest, ...own } = window.FravashiDiscount.splitFields(itemForm.value.customFields);
+                discountForm.value = own;
+                itemForm.value.customFields = rest;
+            }
+        }
+        function joinTypeFields(type, customFields) {
+            if (type === "card") return window.FravashiExtension.joinCardFields({ ...cardForm.value, rest: customFields });
+            if (type === "discount") return window.FravashiDiscount.joinFields({ ...discountForm.value, rest: customFields });
+            return customFields;
+        }
+        // Смена типа в форме: служебные поля переезжают между отдельными полями и доп. полями, ничего не теряется
         function onItemTypeChange() {
             const nt = itemForm.value.itemType;
             if (nt === formType) return;
-            if (formType === "card") moveCardFieldsToCustom();
-            if (nt === "card") moveCardFieldsToForm();
+            itemForm.value.customFields = joinTypeFields(formType, itemForm.value.customFields);
+            resetTypeForms();
+            moveTypeFieldsToForm(nt);
             formType = nt;
         }
         function onCardNumberInput(e) { itemForm.value.username = e.target.value = maskCardNumber(e.target.value); }
@@ -2031,6 +2109,11 @@ createApp({
                 expiry: !!exp && !expParsed,
                 cvv: !!f.password && !/^\d{3,4}$/.test(f.password)
             };
+        });
+        // Подсказка под номером дисконтной карты: какой код получится или почему не получится (сохранение не блокируется)
+        const discountCheck = computed(() => {
+            if (itemForm.value.itemType !== "discount" || !String(itemForm.value.username || "").trim()) return null;
+            return window.FravashiDiscount.resolveCode(itemForm.value.username, discountForm.value.format);
         });
         const loginWarn = computed(() => {
             const f = itemForm.value;
@@ -2063,7 +2146,7 @@ createApp({
             const keyToUse = (itemForm.value.scope === 'family' && familyKey) ? familyKey : vaultKey;
             // Схема записи прежняя: отдельные поля формы карты собираются обратно в доп. поля
             const data = { ...itemForm.value };
-            if (data.itemType === "card") data.customFields = window.FravashiExtension.joinCardFields({ ...cardForm.value, rest: data.customFields });
+            data.customFields = joinTypeFields(data.itemType, data.customFields);
             const { ciphertext, iv } = await encryptData(keyToUse, data);
             const payload = {
                 scope: itemForm.value.scope,
@@ -2484,6 +2567,11 @@ createApp({
                 if (document.visibilityState === "visible" && sessionToken.value && sessionToken.value !== "OFFLINE_MODE") loadVault();
             }, FravashiSync.AUTO_REFRESH_MS);
 
+            // Выход из полноэкранного режима кнопкой браузера (Esc, жест) закрывает и окно кода
+            document.addEventListener("fullscreenchange", () => {
+                if (!document.fullscreenElement && discountFullscreen.value) closeDiscountFullscreen();
+            });
+
             window.addEventListener("keydown", (e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
                     e.preventDefault();
@@ -2499,6 +2587,7 @@ createApp({
                     showExtensionModal.value = false;
                     showPwaModal.value = false;
                     showLogsModal.value = false;
+                    if (discountFullscreen.value) closeDiscountFullscreen();
                     multiSelectMode.value = false;
                     mobileNavOpen.value = false;
                 }
@@ -2533,6 +2622,8 @@ createApp({
             isAndroidAppUrl, extractAndroidPkg, getWorkingWebUrl, getGooglePlayUrl, generateWifiQrSvg, activeCardData,
             activeSubCardIdx, subCardsViewAll, isMultiCard, showSingleView, deleteSelectedInGroup,
             formatCardNumber, detectCardBrand, cardExtra,
+            discountForm, discountCheck, discountExtra, discountCode, discountErrorText, isHiddenCustomField, visibleCustomFieldCount,
+            discountFullscreen, discountFullscreenRef, openDiscountFullscreen, closeDiscountFullscreen,
             shownPwds, toggleShownPwd, customFieldKey, isSecretFieldLabel, pwnedKey, pwnedInfo, checkPwned,
             idleSecondsLeft, idleLabel,
             showExtensionModal, showPwaModal, canInstallPwa, installPwaNow, showLogsModal, systemLogs, openLogsModal, clearSystemLogs, currentOrigin, triggerPwaInstall, downloadBrowserExtensionZip,

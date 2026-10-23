@@ -11,6 +11,7 @@ FravashiVault itself is licensed under AGPL-3.0-or-later (see [LICENSE](LICENSE)
 | [Vue](https://github.com/vuejs/core) | 3.3.4 | MIT | `static/vendor/vue.global.prod.js` |
 | [PapaParse](https://github.com/mholt/PapaParse) | 5.4.1 | MIT | `static/vendor/papaparse.min.js` |
 | [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (Kazuhiko Arase, © 2009) | 1.4.4 (as recorded in AUDIT.md; the file header has no version) | MIT | `static/vendor/qrcode.js` |
+| [JsBarcode](https://github.com/lindell/JsBarcode) (© Johan Lindell) | 3.11.6 | MIT | `static/vendor/JsBarcode.all.min.js` (loyalty card barcodes) |
 | [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) | 3.4.17 (build time only; the generated CSS is `static/app.css`) | MIT | `static/app.css` |
 | [Inter](https://github.com/rsms/inter) | not recorded | SIL OFL 1.1 | `static/vendor/fonts/inter-*.woff2` |
 | [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) | not recorded | SIL OFL 1.1 | `static/vendor/fonts/jetbrains-mono-*.woff2` |

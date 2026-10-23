@@ -33,7 +33,7 @@
 
 ## Этап 3 (2026-10-21): фронтенд и CSP
 
-- Vue 3.3.4, PapaParse 5.4.1, qrcode-generator 1.4.4, Font Awesome 6.4.0 (только woff2), Inter и JetBrains Mono (woff2, латиница+кириллица) лежат в `static/vendor/`. Tailwind 3.4.17 собран в `static/app.css`; исходники: `tailwind.config.js`, `static/input.css` (команда сборки в первой строке конфига).
+- Vue 3.3.4, PapaParse 5.4.1, qrcode-generator 1.4.4, JsBarcode 3.11.6, Font Awesome 6.4.0 (только woff2), Inter и JetBrains Mono (woff2, латиница+кириллица) лежат в `static/vendor/`. Tailwind 3.4.17 собран в `static/app.css`; исходники: `tailwind.config.js`, `static/input.css` (команда сборки в первой строке конфига).
 - Inline-скрипт вынесен в `static/app.js`, inline-стили — в `static/input.css`. Inline-обработчиков `on*` не было. `/static/*` отдаёт `tower_http::ServeDir` (без листинга, `..` даёт 404).
 - CSP: `script-src self unsafe-eval; style-src self; style-src-attr unsafe-inline; font-src self; img-src self data: blob:; connect-src self https://api.pwnedpasswords.com`. Остались послабления: `unsafe-eval` (Vue компилирует in-DOM шаблоны; переход на runtime-only с прекомпиляцией даст строгий script-src без eval, но требует вынести шаблон в SFC/сборщик (появится npm-сборка) — не делали) и `unsafe-inline` только для атрибутов `style`.
 - Service worker: кэш `aegis-pwa-<APP_BUILD>` (`/sw.js?v=`), предзагрузка локальных файлов, старые кэши удаляются при активации.
