@@ -56,3 +56,6 @@
 ## Статус 2026-10-23 (CSP без unsafe-eval, не выложено)
 - Шаблон #app из index.html предкомпилирован в static/app-render.js, Vue — runtime-only (vue.runtime.global.prod.js), в CSP нет 'unsafe-eval'. APP_BUILD 2026-10-23-12.
 - После правки разметки внутри <div id="app">: `npm install` (один раз), затем `npm run build:templates` и закоммитить static/app-render.js. Тест tests/app-render.test.mjs падает при рассинхроне. Node нужен только разработчику, в образ не попадает (.dockerignore).
+
+## Статус 2026-10-23 (карточка дисконтной карты, не выложено)
+- Просмотр дисконтной карты — карточка 1.586:1 (градиент из 10 палитр, цвет по хэшу названия или явный `cardColor`) или фото (`cardPhoto`, JPEG ≤ 800 px, data URL ≤ 150 000 симв., EXIF учтён) с плашкой названия; штрихкод/QR на белой полосе под ней. Служебные поля скрыты, формат БД/API не менялся. В import-json для метки cardPhoto лимит значения 160 000 (для остальных 5000). APP_BUILD 2026-10-23-13. Тесты: tests/discount-card.test.mjs.

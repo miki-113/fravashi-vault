@@ -1,6 +1,6 @@
 // Версия сборки: кэш браузера чистится только при смене версии (иначе ломается офлайн-запуск).
 // При каждом обновлении файла на сервере увеличивайте это значение.
-const APP_BUILD = "2026-10-23-12";
+const APP_BUILD = "2026-10-23-13";
 
 // Миграция localStorage после переименования проекта (aegis_* → fravashi_*).
 // Выполняется до любых чтений. offline_auth_* / offline_vault_* имён не меняли, офлайн-копия сохраняется.
@@ -882,7 +882,7 @@ createApp({
         const showModalPwd = ref(false);
         // Поля карты в форме: срок, владелец и ПИН хранятся в доп. полях записи (при сохранении собираются обратно)
         const cardForm = ref({ expiry: "", holder: "", pin: "", labels: {} });
-        const discountForm = ref({ format: "auto", expiry: "" });
+        const discountForm = ref({ format: "auto", expiry: "", color: "", photo: "" });
         let formType = "login";
         const loginForm = ref({ username: "", password: "" });
         const regForm = ref({ username: "", password: "", passwordConfirm: "", inviteCode: "", setupToken: "", allowEscrow: true });
@@ -997,6 +997,54 @@ createApp({
             return selectedItem.value?.decrypted?.itemType === "discount" && window.FravashiDiscount.isServiceField(cf);
         }
         const visibleCustomFieldCount = computed(() => (selectedItem.value?.decrypted?.customFields || []).filter((cf) => !isHiddenCustomField(cf)).length);
+        // Карточка дисконтной карты: цвет (явный выбор или из хэша названия) и фото; в просмотре и в форме
+        const discountPalette = computed(() => window.FravashiDiscount.paletteFor(selectedItem.value?.decrypted?.title, discountExtra.value.color));
+        const discountCardStyle = computed(() => ({ background: window.FravashiDiscount.cardBackground(discountPalette.value) }));
+        const formPaletteId = computed(() => window.FravashiDiscount.paletteFor(itemForm.value.title, discountForm.value.color).id);
+        const discountPhotoBusy = ref(false);
+        const discountPhotoError = ref("");
+        // Декодирование и сжатие фото целиком в браузере: сеть не используется. EXIF-поворот применяет createImageBitmap / <img>
+        const photoEnv = {
+            async decode(file) {
+                if (window.createImageBitmap) {
+                    try {
+                        const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+                        return { width: bmp.width, height: bmp.height, draw: (ctx, w, h) => ctx.drawImage(bmp, 0, 0, w, h), close: () => bmp.close() };
+                    } catch (e) { /* older browser: fall back to <img> */ }
+                }
+                const url = await new Promise((resolve, reject) => {
+                    const r = new FileReader();
+                    r.onload = () => resolve(r.result);
+                    r.onerror = () => reject(r.error);
+                    r.readAsDataURL(file);
+                });
+                const img = await new Promise((resolve, reject) => {
+                    const im = new Image();
+                    im.onload = () => resolve(im);
+                    im.onerror = () => reject(new Error("decode"));
+                    im.src = url;
+                });
+                return { width: img.naturalWidth, height: img.naturalHeight, draw: (ctx, w, h) => ctx.drawImage(img, 0, 0, w, h), close() { } };
+            },
+            canvas(w, h) {
+                const c = document.createElement("canvas");
+                c.width = w; c.height = h;
+                return c;
+            }
+        };
+        async function onDiscountPhotoPick(e) {
+            const file = e.target.files && e.target.files[0];
+            e.target.value = "";   // тот же файл можно выбрать повторно
+            if (!file) return;
+            discountPhotoError.value = "";
+            discountPhotoBusy.value = true;
+            try {
+                const r = await window.FravashiDiscount.compressPhoto(file, photoEnv);
+                if (r.error) discountPhotoError.value = t("discount.err." + r.error);
+                else discountForm.value.photo = r.value;
+            } finally { discountPhotoBusy.value = false; }
+        }
+        function removeDiscountPhoto() { discountForm.value.photo = ""; discountPhotoError.value = ""; }
         function discountErrorText(r) {
             return t("discount.err." + r.error, { ...r.params, format: t("discount.format." + r.format) });
         }
@@ -2068,7 +2116,8 @@ createApp({
 
         function resetTypeForms() {
             cardForm.value = { expiry: "", holder: "", pin: "", labels: {} };
-            discountForm.value = { format: "auto", expiry: "" };
+            discountForm.value = { format: "auto", expiry: "", color: "", photo: "" };
+            discountPhotoError.value = ""; discountPhotoBusy.value = false;
         }
         // Срок/владелец/ПИН карты и формат/срок дисконтной карты: из доп. полей — в отдельные поля формы и обратно
         function moveTypeFieldsToForm(type) {
@@ -2625,7 +2674,7 @@ createApp({
             isAndroidAppUrl, extractAndroidPkg, getWorkingWebUrl, getGooglePlayUrl, generateWifiQrSvg, activeCardData,
             activeSubCardIdx, subCardsViewAll, isMultiCard, showSingleView, deleteSelectedInGroup,
             formatCardNumber, detectCardBrand, cardExtra,
-            discountForm, discountCheck, discountExtra, discountCode, discountErrorText, isHiddenCustomField, visibleCustomFieldCount,
+            discountForm, discountCheck, discountExtra, discountPalette, discountCardStyle, discountPalettes: window.FravashiDiscount.PALETTES, formPaletteId, discountPhotoBusy, discountPhotoError, onDiscountPhotoPick, removeDiscountPhoto, discountCode, discountErrorText, isHiddenCustomField, visibleCustomFieldCount,
             discountFullscreen, discountFullscreenRef, openDiscountFullscreen, closeDiscountFullscreen,
             shownPwds, toggleShownPwd, customFieldKey, isSecretFieldLabel, pwnedKey, pwnedInfo, checkPwned,
             idleSecondsLeft, idleLabel,

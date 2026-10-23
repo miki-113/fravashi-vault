@@ -691,9 +691,37 @@
                                         </div>
                                     </div>
 
-                                    <!-- Дисконтная карта: штрихкод/QR на белом фоне с тихой зоной, номер под ним -->
-                                    <div v-if="selectedItem.decrypted.itemType === 'discount'" :class="['rounded-xl border p-4', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#dfe5f3] bg-[#f8faff]']">
-                                        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                    <!-- Дисконтная карта: карточка (градиент или фото) и под ней штрихкод/QR на белой полосе с тихой зоной -->
+                                    <div v-if="selectedItem.decrypted.itemType === 'discount'" class="mx-auto w-full max-w-[380px] space-y-3">
+                                        <div class="relative aspect-[1.586/1] w-full overflow-hidden rounded-2xl text-white shadow-[0_18px_40px_rgba(20,36,74,0.28)] ring-1 ring-black/10 dark:ring-white/10"
+                                             :style="discountExtra.photo ? { background: '#121c36' } : discountCardStyle">
+                                            <template v-if="discountExtra.photo">
+                                                <img :src="discountExtra.photo" :alt="t('item.discount.photoAlt')" class="absolute inset-0 h-full w-full object-cover" draggable="false">
+                                                <div class="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 bg-black/65 px-4 py-2.5">
+                                                    <div class="min-w-0 break-words text-[16px] font-bold leading-tight line-clamp-2">{{ decodePunycodeText(selectedItem.decrypted.title) }}</div>
+                                                    <div v-if="discountExtra.expiry" class="shrink-0 text-right font-mono text-[11px] font-semibold opacity-90">{{ discountExtra.expiry }}</div>
+                                                </div>
+                                            </template>
+                                            <template v-else>
+                                                <div class="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10"></div>
+                                                <div class="absolute -right-4 top-16 h-32 w-32 rounded-full bg-white/[0.06]"></div>
+                                                <div class="relative flex h-full flex-col justify-between p-5">
+                                                    <div class="flex items-start justify-between gap-3">
+                                                        <div class="min-w-0 break-words text-[22px] font-bold leading-tight tracking-[-0.01em] line-clamp-3">{{ decodePunycodeText(selectedItem.decrypted.title) }}</div>
+                                                        <i class="fa-solid fa-barcode mt-1 shrink-0 text-[18px] opacity-70"></i>
+                                                    </div>
+                                                    <div class="flex items-end justify-between gap-3">
+                                                        <div class="min-w-0 cursor-pointer break-all font-mono text-[16px] font-semibold tracking-[0.12em]" @click="copyText(activeCardData.username, false)" :title="t('discount.copyNumber')">{{ activeCardData.username }}</div>
+                                                        <div v-if="discountExtra.expiry" class="shrink-0 text-right">
+                                                            <div class="text-[8.5px] uppercase tracking-wider opacity-70">{{ t('card.expiry') }}</div>
+                                                            <div class="font-mono text-[12px] font-semibold">{{ discountExtra.expiry }}</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
                                             <div :class="['text-[10px] font-semibold uppercase tracking-[0.14em]', theme === 'dark' ? 'text-[#aab9dc]' : 'text-[#7182aa]']">{{ t('discount.format.' + discountCode.format) }}</div>
                                             <div class="flex gap-2">
                                                 <button v-if="activeCardData.username" @click="copyText(activeCardData.username, false)" class="flex h-8 items-center gap-1.5 rounded-lg border border-[#315bd7]/30 px-3 text-[11px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
@@ -704,7 +732,7 @@
                                                 </button>
                                             </div>
                                         </div>
-                                        <div v-if="discountCode.svg" class="mx-auto max-w-[420px] rounded-lg bg-white p-2 text-center text-black">
+                                        <div v-if="discountCode.svg" class="rounded-xl bg-white p-3 text-center text-black ring-1 ring-black/10">
                                             <div v-html="discountCode.svg" :class="['mx-auto', discountCode.format === 'qr' ? 'max-w-[240px]' : '']"></div>
                                             <div class="mt-1 break-all font-mono text-[15px] font-semibold tracking-[0.16em]">{{ discountCode.value }}</div>
                                         </div>
@@ -714,9 +742,6 @@
                                                 <div>{{ discountErrorText(discountCode) }}</div>
                                                 <div v-if="activeCardData.username" class="mt-1 break-all font-mono text-[13px] font-semibold">{{ activeCardData.username }}</div>
                                             </div>
-                                        </div>
-                                        <div v-if="discountExtra.expiry" :class="['mt-3 text-[11px]', theme === 'dark' ? 'text-[#c3cfea]' : 'text-[#5d6f96]']">
-                                            <i class="fa-regular fa-calendar text-[10px]"></i> {{ t('discount.validUntil', { date: discountExtra.expiry }) }}
                                         </div>
                                     </div>
 
@@ -1241,6 +1266,30 @@
                             <label class="block text-[10.5px] font-semibold">{{ t('item.discount.expiry') }}
                                 <input v-model="discountForm.expiry" autocomplete="off" maxlength="20" :placeholder="t('item.discount.expiryPlaceholder')" :class="['mt-1 h-10 w-full rounded-lg border px-3 text-[12px] font-normal outline-none focus:border-[#6d8df0]', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
                             </label>
+                        </div>
+                        <div class="mb-3">
+                            <div class="text-[10.5px] font-semibold">{{ t('item.discount.color') }}</div>
+                            <div class="mt-1.5 flex flex-wrap gap-2">
+                                <button v-for="(p, pi) in discountPalettes" :key="p.id" type="button" @click="discountForm.color = p.id"
+                                        :aria-label="t('item.discount.colorOption', { n: pi + 1 })" :aria-pressed="formPaletteId === p.id"
+                                        :class="['h-7 w-7 rounded-full ring-offset-2 transition', theme === 'dark' ? 'ring-offset-[#18243d]' : 'ring-offset-white', formPaletteId === p.id ? 'ring-2 ring-[#6d8df0]' : 'ring-1 ring-black/10']"
+                                        :style="{ background: 'linear-gradient(135deg, ' + p.from + ', ' + p.to + ')' }"></button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="text-[10.5px] font-semibold">{{ t('item.discount.photo') }}</div>
+                            <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                                <img v-if="discountForm.photo" :src="discountForm.photo" :alt="t('item.discount.photoAlt')" class="h-12 w-[76px] rounded-lg object-cover ring-1 ring-black/10">
+                                <label :class="['flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-[11px] font-semibold', theme === 'dark' ? 'border-[#3b4d70] text-[#91d2ff]' : 'border-[#d8e0f3] text-[#315bd7]', discountPhotoBusy ? 'pointer-events-none opacity-60' : '']">
+                                    <i class="fa-solid fa-camera text-[10px]"></i> {{ discountPhotoBusy ? t('item.discount.photoBusy') : (discountForm.photo ? t('item.discount.photoChange') : t('item.discount.photo')) }}
+                                    <input type="file" accept="image/*" class="hidden" @change="onDiscountPhotoPick" :disabled="discountPhotoBusy">
+                                </label>
+                                <button v-if="discountForm.photo" type="button" @click="removeDiscountPhoto" class="flex h-9 items-center gap-1.5 rounded-lg border border-[#e11d48]/30 px-3 text-[11px] font-semibold text-[#e11d48]">
+                                    <i class="fa-regular fa-trash-can text-[10px]"></i> {{ t('item.discount.photoRemove') }}
+                                </button>
+                            </div>
+                            <p v-if="discountPhotoError" class="mt-1 text-[10.5px] font-normal text-[#b45309] dark:text-[#fbbf24]">{{ discountPhotoError }}</p>
+                            <p v-else :class="['mt-1 text-[10px] font-normal', theme === 'dark' ? 'text-[#aab8d5]' : 'text-[#7281a4]']">{{ t('item.discount.photoHint') }}</p>
                         </div>
                     </template>
 

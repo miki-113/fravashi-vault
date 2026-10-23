@@ -1,4 +1,4 @@
-// Дисконтные карты: выбор формата штрихкода, проверка номера, служебные доп. поля. Чистые функции без DOM: тесты в tests/discount.test.mjs (node --test).
+// Дисконтные карты: выбор формата штрихкода, проверка номера, служебные доп. поля, цвет карточки, сжатие фото. Чистые функции без DOM: тесты в tests/discount.test.mjs (node --test).
 // Схема записи как у банковской карты: номер — username, формат и срок — доп. поля с постоянными (не переводимыми) метками.
 // Ошибка возвращается кодом (discount.err.*), текст собирает интерфейс.
 (function (root) {
@@ -7,6 +7,26 @@
     const FORMATS = ["auto", "ean13", "ean8", "code128", "code39", "qr"];
     const FORMAT_FIELD = "barcodeFormat";
     const EXPIRY_FIELD = "validUntil";
+    const COLOR_FIELD = "cardColor";
+    const PHOTO_FIELD = "cardPhoto";
+    const PHOTO_MAX_SIDE = 800;
+    const PHOTO_MAX_CHARS = 150000;          // data URL ≈ 112 КБ JPEG; вместе с остальными полями запись остаётся в лимите 190 000 байт открытого текста
+    const PHOTO_MAX_INPUT_BYTES = 40 * 1024 * 1024;
+    const PHOTO_PREFIX = "data:image/jpeg;base64,";
+    const PHOTO_QUALITIES = [0.82, 0.72, 0.62, 0.52, 0.42, 0.32];
+    // Палитры карточки: белый текст читается на обоих концах градиента (контраст ≥ 4.5, проверяется тестом)
+    const PALETTES = [
+        { id: "blue", from: "#2f5fd0", to: "#142a63" },
+        { id: "emerald", from: "#0c6e53", to: "#0a3d33" },
+        { id: "crimson", from: "#c0283f", to: "#5e1223" },
+        { id: "violet", from: "#6d3fd1", to: "#2e1a63" },
+        { id: "amber", from: "#a24a0c", to: "#5a2608" },
+        { id: "teal", from: "#0c6a85", to: "#0b3b4d" },
+        { id: "magenta", from: "#a8267f", to: "#4d1038" },
+        { id: "slate", from: "#3f4f6b", to: "#171f33" },
+        { id: "indigo", from: "#3b3fb5", to: "#1a1c5c" },
+        { id: "olive", from: "#456e0d", to: "#233a07" }
+    ];
     const MAX_LINEAR = 80;   // длиннее линейный штрихкод на экране телефона уже не читается
     const MAX_QR_BYTES = 500;
 
@@ -73,30 +93,89 @@
         return { format: f, ...r };
     }
 
-    // Доп. поля записи → { format, expiry, labels, rest }; служебные поля ищутся по точной метке
+    // FNV-1a от названия без регистра: стабильный индекс палитры
+    function defaultColorId(title) {
+        let h = 0x811c9dc5;
+        const s = String(title || "").trim().toLowerCase();
+        for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+        return PALETTES[h % PALETTES.length].id;
+    }
+    // Явный выбор (если он есть в палитре) или цвет из хэша названия
+    function paletteFor(title, colorId) {
+        const id = String(colorId || "");
+        return PALETTES.find((p) => p.id === id) || PALETTES.find((p) => p.id === defaultColorId(title));
+    }
+    function cardBackground(palette) { return "linear-gradient(135deg, " + palette.from + " 0%, " + palette.to + " 100%)"; }
+
+    // В <img> попадает только JPEG data URL нужного размера: чужие URL из синхронизации или импорта не грузятся
+    function isValidPhoto(v) {
+        return typeof v === "string" && v.length > PHOTO_PREFIX.length && v.length <= PHOTO_MAX_CHARS + 1000
+            && v.startsWith(PHOTO_PREFIX) && /^[A-Za-z0-9+/]+={0,2}$/.test(v.slice(PHOTO_PREFIX.length));
+    }
+
+    // Доп. поля записи → { format, expiry, color, photo, rest }; служебные поля ищутся по точной метке
     function splitFields(customFields) {
         const cf = Array.isArray(customFields) ? customFields : [];
-        const out = { format: "auto", expiry: "", rest: [] };
-        let hasFormat = false, hasExpiry = false;
+        const out = { format: "auto", expiry: "", color: "", photo: "", rest: [] };
+        const seen = {};
         for (const f of cf) {
             const label = f && f.label;
-            if (label === FORMAT_FIELD && !hasFormat) { hasFormat = true; out.format = normalizeFormat(f.value); }
-            else if (label === EXPIRY_FIELD && !hasExpiry) { hasExpiry = true; out.expiry = String(f.value || ""); }
+            if (label === FORMAT_FIELD && !seen[label]) { seen[label] = 1; out.format = normalizeFormat(f.value); }
+            else if (label === EXPIRY_FIELD && !seen[label]) { seen[label] = 1; out.expiry = String(f.value || ""); }
+            else if (label === COLOR_FIELD && !seen[label]) { seen[label] = 1; out.color = PALETTES.some((p) => p.id === f.value) ? f.value : ""; }
+            else if (label === PHOTO_FIELD && !seen[label]) { seen[label] = 1; out.photo = isValidPhoto(f.value) ? f.value : ""; }
             else out.rest.push(f);
         }
         return out;
     }
 
-    // Обратная сборка: формат сохраняется всегда, пустой срок — нет
-    function joinFields({ format, expiry, rest }) {
+    // Обратная сборка: формат сохраняется всегда, остальное — только если задано
+    function joinFields({ format, expiry, color, photo, rest }) {
         const own = [{ label: FORMAT_FIELD, value: normalizeFormat(format) }];
         if (String(expiry || "").trim()) own.push({ label: EXPIRY_FIELD, value: String(expiry).trim() });
+        if (PALETTES.some((p) => p.id === color)) own.push({ label: COLOR_FIELD, value: color });
+        if (isValidPhoto(photo)) own.push({ label: PHOTO_FIELD, value: photo });
         return own.concat(Array.isArray(rest) ? rest : []);
     }
 
-    function isServiceField(f) { return !!f && (f.label === FORMAT_FIELD || f.label === EXPIRY_FIELD); }
+    function isServiceField(f) { return !!f && [FORMAT_FIELD, EXPIRY_FIELD, COLOR_FIELD, PHOTO_FIELD].includes(f.label); }
 
-    const api = { FORMATS, FORMAT_FIELD, EXPIRY_FIELD, normalizeFormat, compactNumber, eanCheckDigit, eanValid, resolveCode, splitFields, joinFields, isServiceField };
+    // Сжатие фото карты. env даёт доступ к DOM (в тестах подменяется):
+    //   decode(file) → Promise<{ width, height, draw(ctx, w, h), close() }> (EXIF-поворот уже применён),
+    //   canvas(w, h) → { getContext(), toDataURL(type, q) }.
+    // Результат: { value: dataURL } или { error: код } (discount.err.*). Сеть не используется.
+    async function compressPhoto(file, env) {
+        if (!file || !/^image\/(?!svg)/i.test(file.type || "")) return { error: "photoNotImage" };
+        if (file.size > PHOTO_MAX_INPUT_BYTES) return { error: "photoTooBig" };
+        let img;
+        try { img = await env.decode(file); } catch (e) { return { error: "photoDecode" }; }
+        try {
+            if (!(img.width > 0 && img.height > 0)) return { error: "photoDecode" };
+            let scale = Math.min(1, PHOTO_MAX_SIDE / Math.max(img.width, img.height));
+            for (let attempt = 0; attempt < 4; attempt++, scale *= 0.8) {
+                const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
+                let cv;
+                try {
+                    cv = env.canvas(w, h);
+                    const ctx = cv.getContext("2d");
+                    ctx.fillStyle = "#fff";   // JPEG без прозрачности: PNG с альфой не должен стать чёрным
+                    ctx.fillRect(0, 0, w, h);
+                    img.draw(ctx, w, h);
+                } catch (e) { return { error: "photoCompress" }; }
+                for (const q of PHOTO_QUALITIES) {
+                    let url;
+                    try { url = cv.toDataURL("image/jpeg", q); } catch (e) { return { error: "photoCompress" }; }
+                    if (!url.startsWith(PHOTO_PREFIX)) return { error: "photoCompress" };   // браузер не умеет JPEG и отдал PNG
+                    if (url.length <= PHOTO_MAX_CHARS) return { value: url };
+                }
+            }
+            return { error: "photoCompress" };
+        } finally {
+            try { if (img.close) img.close(); } catch (e) { }
+        }
+    }
+
+    const api = { FORMATS, FORMAT_FIELD, EXPIRY_FIELD, COLOR_FIELD, PHOTO_FIELD, PALETTES, PHOTO_MAX_SIDE, PHOTO_MAX_CHARS, defaultColorId, paletteFor, cardBackground, isValidPhoto, compressPhoto, normalizeFormat, compactNumber, eanCheckDigit, eanValid, resolveCode, splitFields, joinFields, isServiceField };
     if (typeof module !== "undefined" && module.exports) module.exports = api;
     else root.FravashiDiscount = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

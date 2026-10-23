@@ -59,7 +59,7 @@ test("служебные доп. поля: разбор и обратная сб
     assert.deepEqual(s.rest, [{ label: "Телефон", value: "+7" }, { label: "barcodeFormat", value: "qr" }], "повтор метки остаётся обычным полем");
     assert.deepEqual(d.joinFields(s), [{ label: "barcodeFormat", value: "ean8" }, { label: "validUntil", value: "31.12.2027" }, ...s.rest]);
     assert.deepEqual(d.joinFields({ format: "zzz", expiry: "  ", rest: [] }), [{ label: "barcodeFormat", value: "auto" }]);
-    assert.deepEqual(d.splitFields(undefined), { format: "auto", expiry: "", rest: [] });
+    assert.deepEqual(d.splitFields(undefined), { format: "auto", expiry: "", color: "", photo: "", rest: [] });
     assert.ok(d.isServiceField({ label: "validUntil" }) && !d.isServiceField({ label: "Срок" }));
 });
 

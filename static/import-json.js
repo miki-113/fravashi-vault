@@ -11,7 +11,7 @@
     const SCOPES = ["personal", "family"];
     const LIMITS = {
         title: 500, url: 2048, username: 500, password: 2048, totpSecret: 512, note: 20000, folder: 64,
-        label: 200, value: 5000
+        label: 200, value: 5000, photoValue: 160000   // photoValue — только для служебного поля cardPhoto (фото дисконтной карты)
     };
     const MAX_CUSTOM_FIELDS = 50, MAX_HISTORY = 20, MAX_SUBCARDS = 100, MAX_FOLDERS = 100;
 
@@ -63,7 +63,7 @@
             note: str(raw.note, LIMITS.note, w("note")),
             customFields: list(raw.customFields, MAX_CUSTOM_FIELDS, w("customFields")).map((f, i) => {
                 if (!isObj(f)) fail("expectedObject", w("customField", i + 1));
-                return { label: str(f.label, LIMITS.label, w("customField", i + 1)), value: str(f.value, LIMITS.value, w("customField", i + 1)) };
+                return { label: str(f.label, LIMITS.label, w("customField", i + 1)), value: str(f.value, f.label === "cardPhoto" ? LIMITS.photoValue : LIMITS.value, w("customField", i + 1)) };
             }),
             passwordHistory: list(raw.passwordHistory, MAX_HISTORY, w("passwordHistory")).map((h, i) => {
                 if (!isObj(h)) fail("expectedObject", w("historyEntry", i + 1));
