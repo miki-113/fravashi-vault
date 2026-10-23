@@ -19,9 +19,9 @@ const base = (k) => k.replace(PLURAL, "");
 const CYR = /[Ѐ-ӿ]/;
 
 // Строки с кириллицей вне словарей, помеченные «// i18n-ignore»: регулярки по данным пользователя
-// (подписи полей карты, ключевые слова авторазбора по папкам) и расширение браузера, которое пока не переводится.
+// (подписи полей карты, ключевые слова авторазбора по папкам и поиска полей карты на сайтах в расширении).
 // Новая пометка — осознанное решение: обновите число здесь.
-const EXPECTED_IGNORED = 10;
+const EXPECTED_IGNORED = 15;
 
 test("наборы ключей ru и en совпадают (формы множественного числа — по базовому ключу)", () => {
     const r = Object.keys(ru).filter((k) => !PLURAL.test(k)).sort(), e = Object.keys(en).filter((k) => !PLURAL.test(k)).sort();
@@ -66,13 +66,13 @@ test("плейсхолдеры {…} совпадают в обоих языка
     for (const k of Object.keys(ru).filter((x) => /\.other$/.test(x))) assert.deepEqual(placeholders(en[k]), placeholders(ru[k]), k);
 });
 
-test("в index.html, app.js и import-json.js нет кириллицы вне словарей", () => {
+test("в index.html, app.js, import-json.js и extension-build.js нет кириллицы вне словарей", () => {
     const found = [];
     const html = read("index.html").replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, ""));
     html.split("\n").forEach((l, i) => { if (CYR.test(l)) found.push(`index.html:${i + 1}: ${l.trim()}`); });
 
     let ignored = 0;
-    for (const f of ["static/app.js", "static/import-json.js"]) {
+    for (const f of ["static/app.js", "static/import-json.js", "static/extension-build.js"]) {
         // Блочных комментариев в этих файлах нет (а «*/*» встречается в строках), поэтому разбираются только «//»
         read(f).split("\n").forEach((l, i) => {
             if (l.includes("i18n-ignore")) {

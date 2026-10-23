@@ -2,49 +2,137 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
+import { createRequire } from "node:module";
 
 const root = new URL("../", import.meta.url);
-const src = fs.readFileSync(new URL("static/app.js", root), "utf8");
+const read = (p) => fs.readFileSync(new URL(p, root), "utf8");
+const ext = createRequire(import.meta.url)("../static/extension-build.js");
 
-// Файлы расширения собираются шаблонными строками в downloadBrowserExtensionZip: вычисляем их так же
-function build(name) {
-    const m = src.match(new RegExp("const " + name + " = (`[^\\n]*`);"));
-    assert.ok(m, name);
-    return new Function("srvOrigin", "popupText", "return " + m[1])("https://vault.test", {
-        mismatch: "M {site} {saved}", noUrl: "N {site}", fillAnyway: "Y", cancel: "C", noTab: "T"
-    });
+function loadDicts() {
+    const sandbox = { window: {} };
+    for (const l of ["ru", "en"]) vm.runInNewContext(read(`static/i18n/${l}.js`), sandbox);
+    return sandbox.window.FRAVASHI_I18N;
 }
+const dicts = loadDicts();
+const ORIGIN = "https://vault.test";
+const build = (lang = "ru", origin = ORIGIN) => ext.buildExtensionFiles({ origin, lang, dicts });
 
 // Объекты из vm-контекста — с чужими прототипами: сравниваем их как JSON
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
-function el() {
-    return { value: "", textContent: "", style: {}, classList: { add() {}, remove() {} }, querySelectorAll: () => [] };
-}
-
-function loadPopup(tabUrl) {
-    const sent = [];
+// Окно расширения: элементы по id, вкладка, executeScript и fetch подменены
+function loadPopup({ tabUrl = "https://x.test/", lang = "ru", reply = async () => [404, {}], inject, navigatorLang } = {}) {
+    const calls = [];
+    const injected = [];
     const els = {};
-    const sandbox = {
-        document: { getElementById: (id) => (els[id] ||= el()), addEventListener() {}, createElement: el },
-        chrome: { tabs: {
-            query: (_q, cb) => cb(tabUrl === null ? [] : [{ id: 7, url: tabUrl }]),
-            sendMessage: (id, m) => sent.push([id, m]),
-        } },
-        setTimeout() {}, URL, TextEncoder, TextDecoder,
+    let onReady;
+    const mk = () => {
+        const classes = new Set();
+        return {
+            value: "", textContent: "", innerHTML: "", checked: false, style: {}, classes,
+            classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c) },
+            querySelectorAll: () => [], appendChild() {}, focus() {},
+        };
     };
-    const api = vm.runInNewContext(build("popupJs") + ";({hostOf,hostMatches,fill})", sandbox);
-    return { ...api, sent, els };
+    const sandbox = {
+        document: {
+            getElementById: (id) => (els[id] ||= mk()),
+            addEventListener: (ev, f) => { if (ev === "DOMContentLoaded") onReady = f; },
+            createElement: mk,
+            querySelectorAll: () => [],
+        },
+        chrome: {
+            tabs: { query: async () => (tabUrl === null ? [] : [{ id: 7, url: tabUrl }]) },
+            scripting: { executeScript: async (o) => { injected.push(o); return [{ result: inject ? inject(o) : { status: "ok" } }]; } },
+        },
+        fetch: async (url, opts = {}) => {
+            calls.push({ url, headers: opts.headers || {}, body: opts.body ? JSON.parse(opts.body) : null });
+            const [status, body] = await reply(url, calls);
+            return { ok: status === 200, status, json: async () => body };
+        },
+        crypto: globalThis.crypto, setTimeout() {}, URL, TextEncoder, TextDecoder, Uint8Array, JSON,
+    };
+    if (navigatorLang) sandbox.navigator = { language: navigatorLang };
+    const api = vm.runInNewContext(build(lang)["popup.js"] + ";({hostOf,hostMatches,fill,askCard,toItem,derive,tr,LANG})", sandbox);
+    // начальное состояние как в popup.html: сейф, поле кода и диалоги скрыты
+    for (const id of ["username", "password", "statusBox", "totpCode"]) sandbox.document.getElementById(id);
+    for (const id of ["totpBox", "vaultView", "confirmBox", "cardBox"]) sandbox.document.getElementById(id).classes.add("hidden");
+    onReady();
+    return { api, els, calls, injected };
 }
 
-test("файлы расширения — корректный JS, версия поднята", () => {
-    new vm.Script(build("popupJs"));
-    new vm.Script(build("contentJs"));
-    assert.match(src, /version: "1\.2\.0"/);
+// Выполнение функции во «вкладке» так же, как это делает Chrome: только текст функции и аргументы
+function runInPage(call, page) {
+    return plain(vm.runInNewContext("(" + call.func.toString() + ").apply(null, " + JSON.stringify(call.args) + ")", page));
+}
+function input(props) {
+    const attrs = props.attrs || {};
+    return {
+        type: "text", name: "", id: "", placeholder: "", maxLength: -1, offsetParent: {}, disabled: false, readOnly: false,
+        value: "", focus() {}, dispatchEvent() {}, closest: () => null, getAttribute: (n) => (n in attrs ? attrs[n] : null), ...props,
+    };
+}
+function page(hostname, inputs) {
+    return {
+        location: { hostname }, window: { HTMLInputElement: { prototype: {} } }, Event: class {}, Object, Array,
+        document: {
+            querySelectorAll: (q) => (q === "input" ? inputs : q.includes("password") ? inputs.filter((i) => i.type === "password") : []),
+            body: { querySelectorAll: () => inputs.filter((i) => i.type === "text") },
+        },
+    };
+}
+
+test("манифест: версия 1.3.0, только activeTab и scripting, сеть — только сервер, без content_scripts", () => {
+    const files = build("ru");
+    const m = JSON.parse(files["manifest.json"]);
+    assert.equal(m.manifest_version, 3);
+    assert.equal(m.version, "1.3.0");
+    assert.equal(ext.EXT_VERSION, "1.3.0");
+    assert.deepEqual(m.permissions, ["activeTab", "scripting"]);
+    assert.deepEqual(m.host_permissions, ["https://vault.test/*"]);
+    for (const k of ["content_scripts", "optional_permissions", "optional_host_permissions", "background", "web_accessible_resources", "externally_connectable"]) {
+        assert.ok(!(k in m), `лишний ключ ${k}`);
+    }
+    assert.deepEqual(Object.keys(files).sort(), ["_locales/en/messages.json", "_locales/ru/messages.json", "manifest.json", "popup.html", "popup.js"]);
+    const all = Object.values(files).join("\n");
+    for (const bad of ["<all_urls>", "*://*/*", "http://*/*", "https://*/*", "sendMessage", "onMessage"]) assert.ok(!all.includes(bad), bad);
+    assert.equal(m.default_locale, "ru");
+    assert.equal(JSON.parse(build("en")["manifest.json"]).default_locale, "en");
+    assert.equal(JSON.parse(files["_locales/en/messages.json"]).extName.message, dicts.en["extension.popup.extName"]);
+    // адрес с портом: шаблон без порта (в Chrome он совпадает с любым портом этого хоста)
+    assert.equal(ext.hostPattern("http://localhost:8585"), "http://localhost/*");
+    // файлы расширения — корректный JS
+    new vm.Script(files["popup.js"]);
+});
+
+test("i18n: наборы ключей окна расширения ru и en совпадают, все используемые ключи есть", () => {
+    const keys = (d) => Object.keys(d).filter((k) => k.startsWith(ext.DICT_PREFIX)).sort();
+    assert.deepEqual(keys(dicts.ru), keys(dicts.en));
+    const files = build("ru");
+    const used = new Set([
+        ...[...files["popup.js"].matchAll(/\btr\("([A-Za-z0-9]+)"/g)].map((m) => m[1]),
+        ...[...files["popup.js"].matchAll(/\btr\([^)]*\? "([A-Za-z0-9]+)" : "([A-Za-z0-9]+)"/g)].flatMap((m) => [m[1], m[2]]),
+        ...[...files["popup.html"].matchAll(/data-i18n(?:-ph)?="([A-Za-z0-9]+)"/g)].map((m) => m[1]),
+        "extName", "extDesc", "cardFilledNoCvv", "hostChanged", "injectFailed", "noLoginFields", "cardNotFound", "filled", "cardFilled",
+    ]);
+    assert.ok(used.size > 30, `ключей: ${used.size}`);
+    for (const k of used) for (const l of ["ru", "en"]) assert.ok(dicts[l][ext.DICT_PREFIX + k], `${l}: ${k}`);
+    // в разметке окна нет текста на конкретном языке
+    assert.ok(!/[Ѐ-ӿ]/.test(files["popup.html"]));
+    assert.equal(dicts.ru["extension.popup.cardNotFound"], "Поля карты не найдены на этой странице или находятся во вложенной платёжной форме");
+});
+
+test("язык окна: язык приложения при скачивании, иначе — язык браузера", () => {
+    assert.equal(loadPopup({ lang: "en" }).api.LANG, "en");
+    assert.equal(loadPopup({ lang: "en" }).api.tr("unlock"), "Unlock vault");
+    assert.equal(loadPopup({ lang: "ru" }).api.tr("unlock"), "Разблокировать сейф");
+    assert.equal(loadPopup({ lang: "de", navigatorLang: "ru-RU" }).api.LANG, "ru");
+    assert.equal(loadPopup({ lang: "de", navigatorLang: "fr-FR" }).api.LANG, "en");
+    assert.equal(loadPopup({ lang: "de" }).api.LANG, "en");
 });
 
 test("hostOf и hostMatches: хост или его поддомен", () => {
-    const { hostOf, hostMatches } = loadPopup("https://x.test/");
+    const { hostOf, hostMatches } = loadPopup().api;
     assert.equal(hostOf("https://www.Example.com/login"), "example.com");
     assert.equal(hostOf("example.com/path"), "example.com");
     assert.equal(hostOf(""), "");
@@ -58,92 +146,206 @@ test("hostOf и hostMatches: хост или его поддомен", () => {
     assert.ok(!hostMatches("anything.com", "com"));
 });
 
-test("заполнение: при совпадении — сразу, иначе — только после подтверждения", () => {
+test("заполнение логина: при совпадении — сразу через executeScript, иначе — только после подтверждения", async () => {
     const item = { username: "u", password: "p", url: "https://example.com" };
 
-    let p = loadPopup("https://login.example.com/form");
-    p.fill(item);
-    assert.equal(p.sent.length, 1);
-    assert.deepEqual(plain(p.sent[0][1]), { action: "AEGIS_AUTOFILL", host: "login.example.com", username: "u", password: "p" });
+    let p = loadPopup({ tabUrl: "https://login.example.com/form" });
+    await p.api.fill(item);
+    assert.equal(p.injected.length, 1);
+    assert.equal(p.injected[0].func.name, "fillLoginInPage");
+    assert.deepEqual(plain(p.injected[0].target), { tabId: 7 });
+    assert.deepEqual(plain(p.injected[0].args), ["login.example.com", "u", "p"]);
+    assert.equal(p.els.statusBox.textContent, dicts.ru["extension.popup.filled"]);
 
-    p = loadPopup("https://example.com.evil.test/");
-    p.fill(item);
-    assert.equal(p.sent.length, 0, "без подтверждения не отправляется");
-    assert.equal(p.els.confirmText.textContent, "M example.com.evil.test example.com");
+    p = loadPopup({ tabUrl: "https://example.com.evil.test/", lang: "en" });
+    await p.api.fill(item);
+    assert.equal(p.injected.length, 0, "без подтверждения не заполняется");
+    assert.ok(!p.els.confirmBox.classes.has("hidden"));
+    assert.equal(p.els.confirmText.textContent, dicts.en["extension.popup.mismatch"].replace("{site}", "example.com.evil.test").replace("{saved}", "example.com"));
     p.els.btnConfirmNo.onclick();
-    assert.equal(p.sent.length, 0);
-    p.fill(item);
-    p.els.btnConfirmYes.onclick();
-    assert.equal(p.sent.length, 1);
+    assert.equal(p.injected.length, 0);
+    await p.api.fill(item);
+    await p.els.btnConfirmYes.onclick();
+    assert.equal(p.injected.length, 1);
 
-    p = loadPopup("https://example.com/");
-    p.fill({ ...item, url: "" });
-    assert.equal(p.sent.length, 0);
-    assert.equal(p.els.confirmText.textContent, "N example.com");
+    p = loadPopup({ tabUrl: "https://example.com/" });
+    await p.api.fill({ ...item, url: "" });
+    assert.equal(p.injected.length, 0);
+    assert.equal(p.els.confirmText.textContent, dicts.ru["extension.popup.noUrl"].replace("{site}", "example.com"));
 
-    p = loadPopup("chrome://extensions/");
-    p.fill(item);
-    assert.equal(p.sent.length, 0);
+    p = loadPopup({ tabUrl: "chrome://extensions/" });
+    await p.api.fill(item);
+    assert.equal(p.injected.length, 0);
+    assert.equal(p.els.statusBox.textContent, dicts.ru["extension.popup.noTab"]);
+
+    // вкладка недоступна (нет activeTab) — понятное сообщение, а не исключение
+    p = loadPopup({ tabUrl: "https://example.com/", inject: () => { throw new Error("Cannot access contents of the page"); } });
+    await p.api.fill(item);
+    assert.equal(p.els.statusBox.textContent, dicts.ru["extension.popup.injectFailed"]);
 });
 
-test("контент-скрипт не заполняет, если страница ушла на другой хост", () => {
-    const run = (hostname, msg) => {
-        let listener;
-        const input = { offsetParent: {}, focus() {}, dispatchEvent() {}, closest: () => null, value: "" };
-        const sandbox = {
-            location: { hostname },
-            window: { HTMLInputElement: { prototype: {} } },
-            Event: class {}, Object, Array,
-            document: { querySelectorAll: (q) => (q.includes("password") ? [input] : []), body: { querySelectorAll: () => [] } },
-            chrome: { runtime: { onMessage: { addListener: (f) => (listener = f) } } },
-        };
-        vm.runInNewContext(build("contentJs"), sandbox);
-        let resp;
-        listener({ action: "AEGIS_AUTOFILL", username: "u", password: "p", ...msg }, null, (r) => (resp = r));
-        return plain({ resp, value: input.value });
+test("заполнение логина во вкладке: не заполняет, если страница ушла на другой хост", async () => {
+    const p = loadPopup({ tabUrl: "https://example.com/" });
+    await p.api.fill({ username: "u", password: "p", url: "example.com" });
+    const call = p.injected[0];
+    const run = (hostname) => {
+        const pw = input({ type: "password" }), user = input({ type: "text" });
+        return { r: runInPage(call, page(hostname, [user, pw])), pw: pw.value, user: user.value };
     };
-    assert.deepEqual(run("example.com", { host: "example.com" }), { resp: { status: "ok" }, value: "p" });
-    assert.deepEqual(run("evil.test", { host: "example.com" }), { resp: { status: "host_changed" }, value: "" });
-    assert.equal(run("example.com", {}).value, "");
+    assert.deepEqual(run("example.com"), { r: { status: "ok" }, pw: "p", user: "u" });
+    assert.deepEqual(run("evil.test"), { r: { status: "host_changed" }, pw: "", user: "" });
+    assert.deepEqual(runInPage(call, page("example.com", [])), { status: "no_fields" });
 });
 
-// Полный popup: обработчики из DOMContentLoaded, классы элементов и подменённый fetch
-function loadPopupWithServer(reply) {
-    const calls = [];
-    const els = {};
-    let onReady;
-    const mk = () => {
-        const classes = new Set();
-        return {
-            value: "", textContent: "", innerHTML: "", style: {}, classes,
-            classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c) },
-            querySelectorAll: () => [], appendChild() {}, focus() {},
-        };
+test("classifyField: autocomplete, затем name/id/placeholder/aria-label на en и ru", () => {
+    const c = (a) => ext.classifyField(a);
+    assert.equal(c({ autocomplete: "cc-number" }), "number");
+    assert.equal(c({ autocomplete: "section-pay billing cc-exp" }), "exp");
+    assert.equal(c({ autocomplete: "cc-exp-month" }), "expMonth");
+    assert.equal(c({ autocomplete: "cc-exp-year" }), "expYear");
+    assert.equal(c({ autocomplete: "cc-name" }), "name");
+    assert.equal(c({ autocomplete: "cc-csc", type: "password" }), "csc");
+    assert.equal(c({ name: "cardNumber" }), "number");
+    assert.equal(c({ placeholder: "1234 5678 9012 3456", type: "tel" }), "number");
+    assert.equal(c({ ariaLabel: "Номер карты" }), "number");
+    assert.equal(c({ placeholder: "MM / YY" }), "exp");
+    assert.equal(c({ placeholder: "ММ/ГГ" }), "exp");
+    assert.equal(c({ id: "expiry-date" }), "exp");
+    assert.equal(c({ placeholder: "Срок действия" }), "exp");
+    assert.equal(c({ id: "cc-exp-month" }), "expMonth");
+    assert.equal(c({ name: "expYear" }), "expYear");
+    assert.equal(c({ placeholder: "Месяц" }), "expMonth");
+    assert.equal(c({ placeholder: "Год" }), "expYear");
+    assert.equal(c({ name: "cardholder" }), "name");
+    assert.equal(c({ placeholder: "Имя владельца карты" }), "name");
+    assert.equal(c({ name: "cvv" }), "csc");
+    assert.equal(c({ ariaLabel: "Security code" }), "csc");
+    assert.equal(c({ placeholder: "Код безопасности" }), "csc");
+    // не поля карты
+    assert.equal(c({ name: "email" }), "");
+    assert.equal(c({ name: "city", placeholder: "Город" }), "");
+    assert.equal(c({ name: "comment" }), "");
+    assert.equal(c({}), "");
+    assert.equal(c({ type: "hidden", autocomplete: "cc-number" }), "");
+    assert.equal(c({ type: "checkbox", name: "cvv" }), "");
+    assert.equal(c({ type: "email", name: "cardNumber" }), "");
+    assert.equal(c({ autocomplete: "current-password", name: "card_code" }), "");
+});
+
+test("parseExpiry: MM/YY и MM/YYYY", () => {
+    const p = (s) => plain(ext.parseExpiry(s));
+    assert.deepEqual(p("07/27"), { month: "07", year: "2027" });
+    assert.deepEqual(p("7/2027"), { month: "07", year: "2027" });
+    assert.deepEqual(p(" 12 / 30 "), { month: "12", year: "2030" });
+    assert.deepEqual(p("01-28"), { month: "01", year: "2028" });
+    assert.deepEqual(p("03.2029"), { month: "03", year: "2029" });
+    for (const bad of ["", null, "13/27", "00/27", "07/7", "07/202", "0727", "abc", "07/27/1"]) assert.equal(ext.parseExpiry(bad), null, String(bad));
+});
+
+test("expiryValue: формат по placeholder и maxlength", () => {
+    const e = { month: "07", year: "2027" };
+    const v = (k, a) => ext.expiryValue(k, e, a);
+    assert.equal(v("exp", {}), "07/27");
+    assert.equal(v("exp", { placeholder: "MM/YYYY" }), "07/2027");
+    assert.equal(v("exp", { placeholder: "ММ/ГГГГ" }), "07/2027");
+    assert.equal(v("exp", { placeholder: "MM / YY", maxLength: 7 }), "07/27");
+    assert.equal(v("exp", { maxLength: 4 }), "0727");
+    assert.equal(v("expMonth", {}), "07");
+    assert.equal(v("expYear", {}), "2027");
+    assert.equal(v("expYear", { placeholder: "YY" }), "27");
+    assert.equal(v("expYear", { placeholder: "ГГ" }), "27");
+    assert.equal(v("expYear", { maxLength: 2 }), "27");
+    assert.equal(v("expYear", { placeholder: "YYYY", maxLength: 4 }), "2027");
+});
+
+test("toItem: номер, CVV, срок и владелец карты — из полей записи и доп. полей", () => {
+    const { toItem } = loadPopup().api;
+    assert.deepEqual(plain(toItem({
+        itemType: "card", title: "Моя карта", username: "2200 1234 5678 9012", password: "123",
+        customFields: [{ label: "Срок", value: "07/27" }, { label: "Владелец", value: "ANNA I" }]
+    })), { kind: "card", title: "Моя карта", number: "2200123456789012", cvc: "123", holder: "ANNA I", expiry: "07/27" });
+    assert.equal(toItem({ itemType: "login", username: "u", password: "p" }).kind, "login");
+    // совпадение с регулярками приложения
+    assert.deepEqual(plain(ext.cardExtra({ customFields: [{ label: "Expiry date", value: "1/30" }, { label: "Card holder", value: "X" }] })), { expiry: "1/30", holder: "X" });
+});
+
+const CARD = { kind: "card", title: "Visa", number: "4111111111111111", cvc: "321", holder: "ANNA I", expiry: "07/27" };
+
+test("карта: заполнение только после подтверждения, CVV — только с галочкой", async () => {
+    let p = loadPopup({ tabUrl: "https://shop.test/checkout" });
+    await p.api.askCard(CARD);
+    assert.equal(p.injected.length, 0, "до подтверждения ничего не заполняется");
+    assert.ok(!p.els.cardBox.classes.has("hidden"));
+    assert.equal(p.els.cardText.textContent, "Заполнить карту «Visa» (•••• 1111) на странице shop.test?");
+    assert.equal(p.els.cardCvv.checked, false, "галочка CVV по умолчанию выключена");
+    p.els.btnCardNo.onclick();
+    assert.ok(p.els.cardBox.classes.has("hidden"));
+    assert.equal(p.injected.length, 0);
+
+    await p.api.askCard(CARD);
+    await p.els.btnCardYes.onclick();
+    assert.equal(p.injected.length, 1);
+    assert.equal(p.injected[0].func.name, "fillCardInPage");
+    assert.deepEqual(plain(p.injected[0].args), ["shop.test", { number: "4111111111111111", holder: "ANNA I", exp: { month: "07", year: "2027" }, cvc: "" }]);
+
+    await p.api.askCard(CARD);
+    p.els.cardCvv.checked = true;
+    await p.els.btnCardYes.onclick();
+    assert.equal(plain(p.injected[1].args)[1].cvc, "321");
+    assert.equal(p.els.cardCvv.checked, false, "галочка сбрасывается после заполнения");
+
+    // служебная страница и запись без номера — без диалога
+    p = loadPopup({ tabUrl: "chrome://newtab/" });
+    await p.api.askCard(CARD);
+    assert.ok(p.els.cardBox.classes.has("hidden"));
+    p = loadPopup({ tabUrl: "https://shop.test/" });
+    await p.api.askCard({ ...CARD, number: "" });
+    assert.ok(p.els.cardBox.classes.has("hidden"));
+    assert.equal(p.els.statusBox.textContent, dicts.ru["extension.popup.cardNoNumber"]);
+
+    // поля не найдены — сообщение про вложенную платёжную форму
+    p = loadPopup({ tabUrl: "https://shop.test/", inject: () => ({ status: "no_fields" }) });
+    await p.api.askCard(CARD);
+    await p.els.btnCardYes.onclick();
+    assert.equal(p.els.statusBox.textContent, dicts.ru["extension.popup.cardNotFound"]);
+});
+
+test("карта во вкладке: поиск видимых полей, срок, CVV, смена хоста", async () => {
+    const p = loadPopup({ tabUrl: "https://shop.test/" });
+    await p.api.askCard(CARD);
+    p.els.cardCvv.checked = true;
+    await p.els.btnCardYes.onclick();
+    const call = p.injected[0];
+
+    // разметка с autocomplete
+    let f = {
+        num: input({ type: "tel", attrs: { autocomplete: "cc-number" } }),
+        exp: input({ attrs: { autocomplete: "cc-exp" }, placeholder: "MM / YY" }),
+        name: input({ attrs: { autocomplete: "cc-name" } }),
+        csc: input({ type: "password", attrs: { autocomplete: "cc-csc" } }),
+        hiddenNum: input({ attrs: { autocomplete: "cc-number" }, offsetParent: null }),
+        email: input({ type: "email", name: "email" }),
     };
-    const sandbox = {
-        document: {
-            getElementById: (id) => (els[id] ||= mk()),
-            addEventListener: (ev, f) => { if (ev === "DOMContentLoaded") onReady = f; },
-            createElement: mk,
-        },
-        chrome: { tabs: { query() {}, sendMessage() {} } },
-        fetch: async (url, opts = {}) => {
-            calls.push({ url, headers: opts.headers || {}, body: opts.body ? JSON.parse(opts.body) : null });
-            const [status, body] = await reply(url, calls);
-            return { ok: status === 200, status, json: async () => body };
-        },
-        crypto: globalThis.crypto, setTimeout() {}, URL, TextEncoder, TextDecoder, Uint8Array, JSON,
+    let r = runInPage(call, page("shop.test", [f.hiddenNum, f.email, f.num, f.exp, f.name, f.csc]));
+    assert.deepEqual(r, { status: "ok", expiry: true, cvcMissing: false });
+    assert.deepEqual([f.num, f.exp, f.name, f.csc, f.hiddenNum, f.email].map((x) => x.value), ["4111111111111111", "07/27", "ANNA I", "321", "", ""]);
+
+    // русские подписи, месяц и год отдельно, без поля CVV
+    f = {
+        num: input({ placeholder: "Номер карты" }),
+        mm: input({ placeholder: "ММ" }),
+        yy: input({ placeholder: "ГГ" }),
     };
-    const api = vm.runInNewContext(build("popupJs") + ";({derive,bytesToHex})", sandbox);
-    // начальное состояние как в popup.html: сейф и поле кода скрыты
-    for (const id of ["serverUrl", "username", "password", "statusBox", "totpCode"]) sandbox.document.getElementById(id);
-    for (const id of ["totpBox", "vaultView"]) sandbox.document.getElementById(id).classes.add("hidden");
-    onReady();
-    els.serverUrl.value = "https://vault.test";
-    els.username.value = "anna";
-    els.password.value = "pw";
-    return { api, els, calls };
-}
+    r = runInPage(call, page("shop.test", [f.num, f.mm, f.yy]));
+    assert.deepEqual(r, { status: "ok", expiry: true, cvcMissing: true });
+    assert.deepEqual([f.num.value, f.mm.value, f.yy.value], ["4111111111111111", "07", "27"]);
+
+    // нет полей (форма во iframe) и смена хоста
+    assert.deepEqual(runInPage(call, page("shop.test", [input({ name: "email", type: "email" })])), { status: "no_fields" });
+    const n = input({ attrs: { autocomplete: "cc-number" } });
+    assert.deepEqual(runInPage(call, page("evil.test", [n])), { status: "host_changed" });
+    assert.equal(n.value, "");
+});
 
 // Сейф, зашифрованный ключом, который popup выведет из пароля «pw»: так проверяется весь путь до /api/vault
 async function sealedVaultKey(api, saltHex) {
@@ -153,6 +355,12 @@ async function sealedVaultKey(api, saltHex) {
     const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, encKey, plain));
     const hex = (b) => Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
     return JSON.stringify({ ciphertext: hex(ct), iv: hex(iv) });
+}
+function loadPopupWithServer(reply) {
+    const p = loadPopup({ reply });
+    p.els.username.value = "anna";
+    p.els.password.value = "pw";
+    return p;
 }
 
 test("второй шаг входа: код уходит вместе с challenge, сейф открывается только после верного кода", async () => {
@@ -168,6 +376,7 @@ test("второй шаг входа: код уходит вместе с challe
     });
     vaultKey = await sealedVaultKey(p.api, salt);
     const urls = () => p.calls.map((c) => c.url.replace("https://vault.test", ""));
+    assert.equal(p.els.serverUrl.value, "https://vault.test");
 
     await p.els.btnUnlock.onclick();
     assert.deepEqual(urls(), ["/api/auth/params/anna", "/api/auth/login"]);

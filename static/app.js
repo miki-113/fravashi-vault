@@ -1,6 +1,6 @@
 // Версия сборки: кэш браузера чистится только при смене версии (иначе ломается офлайн-запуск).
 // При каждом обновлении файла на сервере увеличивайте это значение.
-const APP_BUILD = "2026-10-23-5";
+const APP_BUILD = "2026-10-23-6";
 
 // Миграция localStorage после переименования проекта (aegis_* → fravashi_*).
 // Выполняется до любых чтений. offline_auth_* / offline_vault_* имён не меняли, офлайн-копия сохраняется.
@@ -253,7 +253,7 @@ function generateQrSvg(text) {
     }
 }
 
-// Оформление банковской карты. Регулярки getCardExtra ищут подписи доп. полей в данных пользователя на обоих языках.
+// Оформление банковской карты.
 function formatCardNumber(n) {
     const d = String(n || "").replace(/\D/g, "");
     return d ? d.replace(/(.{4})/g, "$1 ").trim() : (n || "•••• •••• •••• ••••");
@@ -266,13 +266,9 @@ function detectCardBrand(n) {
     if (/^62/.test(d)) return "UnionPay";
     return "";
 }
+// Подписи доп. полей «Срок» и «Владелец» ищутся так же, как в расширении браузера (static/extension-build.js)
 function getCardExtra(data) {
-    const cf = Array.isArray(data?.customFields) ? data.customFields : [];
-    const find = (re) => (cf.find(f => re.test(String(f.label || "").toLowerCase())) || {}).value || "";
-    return {
-        expiry: find(/срок|valid|expir|mm\/yy|мм\/гг/), // i18n-ignore
-        holder: find(/владел|holder|держател|имя|name/) // i18n-ignore
-    };
+    return window.FravashiExtension.cardExtra(data);
 }
 
 // Безопасный случайный индекс без смещения (rejection sampling)
@@ -627,35 +623,9 @@ createApp({
         }
 
         function downloadBrowserExtensionZip() {
-            const srvOrigin = window.location.origin;
-            const manifestJson = JSON.stringify({
-                manifest_version: 3,
-                name: "FravashiVault — Автозаполнение паролей", // i18n-ignore
-                version: "1.2.0",
-                description: "Браузерное расширение FravashiVault для автозаполнения паролей на сайтах", // i18n-ignore
-                permissions: ["storage", "activeTab", "scripting", "tabs"],
-                host_permissions: ["<all_urls>"],
-                action: { default_popup: "popup.html", default_title: "FravashiVault" },
-                content_scripts: [{ matches: ["http://*/*", "https://*/*"], js: ["content.js"], run_at: "document_idle" }]
-            }, null, 2);
-
-            const popupText = {
-                mismatch: t("extension.popup.mismatch"), noUrl: t("extension.popup.noUrl"),
-                fillAnyway: t("extension.popup.fillAnyway"), cancel: t("extension.popup.cancel"), noTab: t("extension.popup.noTab")
-            };
-            const popupHtml = `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>FravashiVault</title><style>*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;}body{width:350px;min-height:440px;max-height:560px;background:#17223a;color:#f1f5f9;display:flex;flex-direction:column;overflow:hidden;}.header{padding:12px 14px;background:#1d315b;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:space-between;font-weight:800;font-size:15px;}.container{padding:14px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}input{width:100%;padding:9px 11px;border-radius:8px;border:1px solid #364768;background:#202d49;color:#f8fafc;font-size:13px;outline:none;}.btn{cursor:pointer;padding:8px 12px;border-radius:8px;border:1px solid #364768;background:#202d49;color:#f8fafc;font-weight:600;font-size:12px;}.btn-primary{background:#315bd7;border-color:transparent;color:#fff;}.item-card{background:#202d49;border:1px solid #364768;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;}.hidden{display:none!important;}</style></head><body><div class="header"><span>️ FravashiVault</span><button id="btnLock" class="btn hidden" style="padding:4px 8px;color:#fb7185;">Выход</button></div><div id="statusBox" style="padding:6px 10px;font-size:12px;text-align:center;display:none;"></div><div id="confirmBox" class="hidden" style="margin:10px 14px 0;padding:10px;border-radius:10px;border:1px solid #f59e0b;background:#3a2a10;color:#fde68a;font-size:12px;display:flex;flex-direction:column;gap:8px;"><div id="confirmText"></div><div style="display:flex;gap:6px;"><button id="btnConfirmNo" class="btn btn-primary" style="flex:1;"></button><button id="btnConfirmYes" class="btn" style="flex:1;color:#fb7185;"></button></div></div><div id="loginView" class="container"><input id="serverUrl" type="text" value="${srvOrigin}" placeholder="Адрес сервера"><input id="username" type="text" placeholder="Логин"><input id="password" type="password" placeholder="Мастер-пароль"><button id="btnUnlock" class="btn btn-primary" style="width:100%;padding:10px;">Разблокировать сейф</button><div id="totpBox" class="hidden" style="margin-top:10px;"><input id="totpCode" type="text" autocomplete="one-time-code" placeholder="Код из приложения или резервный код"><button id="btnTotp" class="btn btn-primary" style="width:100%;padding:10px;">Подтвердить код</button></div></div><div id="vaultView" class="container hidden"><input id="searchBox" type="text" placeholder="Поиск по сайтам..."><div id="itemsList" style="display:flex;flex-direction:column;gap:8px;"></div></div><script src="popup.js"><\/script></body></html>`; // i18n-ignore
-
-            const contentJs = `function setNativeValue(el,val){if(!el)return;el.focus();const s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,"value")?.set;if(s)s.call(el,val);else el.value=val;el.dispatchEvent(new Event("input",{bubbles:true}));el.dispatchEvent(new Event("change",{bubbles:true}));}chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{if(msg.action==="AEGIS_AUTOFILL"){if(!msg.host||location.hostname.toLowerCase()!==msg.host){sendResponse({status:"host_changed"});return;}const p=Array.from(document.querySelectorAll('input[type="password"]')).filter(e=>e.offsetParent!==null);if(p.length>0){setNativeValue(p[0],msg.password);const f=p[0].closest("form")||document.body;const u=Array.from(f.querySelectorAll('input[type="text"],input[type="email"],input[type="tel"],input:not([type])')).filter(e=>e.offsetParent!==null&&!e.readOnly);if(u.length>0)setNativeValue(u[u.length-1],msg.username);}sendResponse({status:"ok"});}});`;
-
-            // legacy-идентификаторы протокола внутри popupJs ("aegis-v2-enc", "aegis-v2-auth") и действие AEGIS_AUTOFILL, не переименовывать: сломает существующие сейфы
-            const popupJs = `const DEFAULT_SRV="${srvOrigin}";const L=${JSON.stringify(popupText)};function hostOf(u){try{const s=String(u||"").trim();if(!s)return "";return new URL(s.includes("://")?s:"https://"+s).hostname.toLowerCase().replace(/^www[.]/,"");}catch(e){return "";}}function hostMatches(tab,saved){return saved.includes(".")&&(tab===saved||tab.endsWith("."+saved));}function ask(text,onYes){const b=document.getElementById("confirmBox");document.getElementById("confirmText").textContent=text;b.classList.remove("hidden");document.getElementById("btnConfirmYes").onclick=()=>{b.classList.add("hidden");onYes();};document.getElementById("btnConfirmNo").onclick=()=>b.classList.add("hidden");}function fill(it){chrome.tabs.query({active:true,currentWindow:true},t=>{const tab=t[0];if(!tab)return;let th="";try{const u=new URL(tab.url||"");if(u.protocol==="http:"||u.protocol==="https:")th=u.hostname.toLowerCase();}catch(e){}if(!th)return msg(L.noTab);const send=()=>chrome.tabs.sendMessage(tab.id,{action:"AEGIS_AUTOFILL",host:th,username:it.username,password:it.password});const sh=hostOf(it.url);if(hostMatches(th.replace(/^www[.]/,""),sh))return send();ask((sh?L.mismatch:L.noUrl).replace("{site}",th).replace("{saved}",sh),send);});}let state={serverUrl:DEFAULT_SRV,token:null,vaultKeyHex:null,items:[]};function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}function bytesToHex(b){return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('');}function hexToBytes(h){const c=(h||"").trim(),b=new Uint8Array(Math.floor(c.length/2));for(let i=0;i<b.length*2;i+=2)b[i/2]=parseInt(c.substring(i,i+2),16);return b;}async function derive(p,s){const e=new TextEncoder(),c=crypto.subtle,m=await c.importKey("raw",e.encode(p),{name:"PBKDF2"},false,["deriveBits"]);const mb=await c.deriveBits({name:"PBKDF2",salt:s,iterations:600000,hash:"SHA-256"},m,256);const h=await c.importKey("raw",mb,"HKDF",false,["deriveBits"]);const x=async i=>new Uint8Array(await c.deriveBits({name:"HKDF",hash:"SHA-256",salt:new Uint8Array(0),info:e.encode(i)},h,256));const eb=await x("aegis-v2-enc"),ab=await x("aegis-v2-auth");const k=await c.importKey("raw",eb,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);eb.fill(0);return{encKey:k,authHash:bytesToHex(ab)};}async function dec(k,c,iv){try{const d=await crypto.subtle.decrypt({name:"AES-GCM",iv:hexToBytes(iv)},k,hexToBytes(c));return JSON.parse(new TextDecoder().decode(d));}catch(e){return null;}}function msg(t){const b=document.getElementById("statusBox");b.textContent=t;b.style.display="block";setTimeout(()=>b.style.display="none",2500);}async function loadVault(){const r=await fetch(state.serverUrl+"/api/vault",{headers:{"Authorization":"Bearer "+state.token}});const d=await r.json();const vk=await crypto.subtle.importKey("raw",hexToBytes(state.vaultKeyHex),{name:"AES-GCM",length:256},true,["encrypt","decrypt"]);const list=[];for(const it of(d.items||[])){if(it.is_trashed)continue;const o=await dec(vk,it.ciphertext,it.iv);if(o&&!o._trashed&&o.itemType!=="note")list.push({title:o.title||"Сайт",username:o.username||"",password:o.password||"",url:o.url||""});}state.items=list;render();}function render(){const q=(document.getElementById("searchBox").value||"").toLowerCase(),box=document.getElementById("itemsList");box.innerHTML="";state.items.filter(x=>(x.title||"").toLowerCase().includes(q)||(x.username||"").toLowerCase().includes(q)).slice(0,50).forEach(it=>{const el=document.createElement("div");el.className="item-card";el.innerHTML='<div style="font-weight:700;font-size:13px;">'+esc(it.title)+'</div><div style="font-size:11.5px;color:#94a3b8;">'+esc(it.username||"—")+'</div><div style="display:flex;gap:6px;"><button class="btn btn-primary" style="flex:1;">⚡ Заполнить</button><button class="btn">Пароль</button></div>';const btns=el.querySelectorAll("button");btns[0].onclick=()=>fill(it);btns[1].onclick=()=>{navigator.clipboard.writeText(it.password);msg("Пароль скопирован!");};box.appendChild(el);});}let pend=null;function resetTotp(){pend=null;document.getElementById("totpBox").classList.add("hidden");document.getElementById("totpCode").value="";}async function openVault(ld,encKey){const eo=JSON.parse(ld.encrypted_vault_key);const vo=await dec(encKey,eo.ciphertext,eo.iv);state.token=ld.token;state.vaultKeyHex=vo.rawKey;resetTotp();await loadVault();document.getElementById("loginView").classList.add("hidden");document.getElementById("vaultView").classList.remove("hidden");document.getElementById("btnLock").classList.remove("hidden");}document.addEventListener("DOMContentLoaded",()=>{document.getElementById("btnConfirmYes").textContent=L.fillAnyway;document.getElementById("btnConfirmNo").textContent=L.cancel;document.getElementById("searchBox").oninput=render;document.getElementById("btnLock").onclick=()=>{document.getElementById("confirmBox").classList.add("hidden");document.getElementById("vaultView").classList.add("hidden");document.getElementById("loginView").classList.remove("hidden");document.getElementById("btnLock").classList.add("hidden");resetTotp();};document.getElementById("btnUnlock").onclick=async()=>{try{const srv=document.getElementById("serverUrl").value.trim().replace(/\\/+$/,""),u=document.getElementById("username").value.trim().toLowerCase(),p=document.getElementById("password").value;state.serverUrl=srv;const sr=await fetch(srv+"/api/auth/params/"+encodeURIComponent(u));const sd=await sr.json();const{encKey,authHash}=await derive(p,hexToBytes(sd.kdf_salt));const lr=await fetch(srv+"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,client_auth_hash:authHash})});if(!lr.ok)throw new Error("Неверный пароль");const ld=await lr.json();document.getElementById("password").value="";if(ld.totp_required){pend={encKey,challenge:ld.challenge};document.getElementById("totpCode").value="";document.getElementById("totpBox").classList.remove("hidden");msg("Введите код двухфакторной защиты");return;}await openVault(ld,encKey);}catch(e){msg(e.message||"Ошибка входа");}};document.getElementById("btnTotp").onclick=async()=>{try{if(!pend)throw new Error("Сначала введите мастер-пароль");const r=await fetch(state.serverUrl+"/api/auth/login/totp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({challenge:pend.challenge,code:document.getElementById("totpCode").value.trim()})});if(!r.ok){let d={};try{d=await r.json();}catch(x){}if(d.detail==="totp_challenge_expired"){resetTotp();throw new Error("Время на ввод кода истекло, войдите заново");}throw new Error(d.detail==="too_many_attempts"?"Слишком много попыток, подождите":"Неверный код");}const ld=await r.json();await openVault(ld,pend.encKey);}catch(e){msg(e.message||"Ошибка входа");}};});`; // i18n-ignore
-
-            const blob = createUncompressedZipBlob({
-                "manifest.json": manifestJson,
-                "popup.html": popupHtml,
-                "popup.js": popupJs,
-                "content.js": contentJs
-            });
+            const blob = createUncompressedZipBlob(window.FravashiExtension.buildExtensionFiles({
+                origin: window.location.origin, lang: lang.value, dicts: { ru: I18N.ru, en: I18N.en }
+            }));
             const a = document.createElement("a");
             a.href = URL.createObjectURL(blob);
             a.download = "fravashi-extension.zip";
