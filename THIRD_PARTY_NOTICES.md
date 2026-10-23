@@ -8,8 +8,8 @@ FravashiVault itself is licensed under AGPL-3.0-or-later (see [LICENSE](LICENSE)
 
 | Component | Version | License | Where |
 |---|---|---|---|
-| [Vue](https://github.com/vuejs/core) | 3.3.4 | MIT | `static/vendor/vue.runtime.global.prod.js` (runtime-only build) |
-| [@vue/compiler-dom](https://github.com/vuejs/core) | 3.3.4 (development only, `package.json`; not shipped) | MIT | `tools/compile-templates.mjs` generates `static/app-render.js` from `index.html` |
+| [Vue](https://github.com/vuejs/core) | 3.5.44 | MIT | `static/vendor/vue.runtime.global.prod.js` (runtime-only build) |
+| [@vue/compiler-dom](https://github.com/vuejs/core) | 3.5.44 (development only, `package.json`; not shipped) | MIT | `tools/compile-templates.mjs` generates `static/app-render.js` from `index.html` |
 | [PapaParse](https://github.com/mholt/PapaParse) | 5.4.1 | MIT | `static/vendor/papaparse.min.js` |
 | [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (Kazuhiko Arase, © 2009) | 1.4.4 (as recorded in AUDIT.md; the file header has no version) | MIT | `static/vendor/qrcode.js` |
 | [JsBarcode](https://github.com/lindell/JsBarcode) (© Johan Lindell) | 3.11.6 | MIT | `static/vendor/JsBarcode.all.min.js` (loyalty card barcodes) |
