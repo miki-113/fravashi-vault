@@ -1278,18 +1278,43 @@
                         </div>
                         <div class="mb-3">
                             <div class="text-[10.5px] font-semibold">{{ t('item.discount.photo') }}</div>
-                            <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                                <img v-if="discountForm.photo" :src="discountForm.photo" :alt="t('item.discount.photoAlt')" class="h-12 w-[76px] rounded-lg object-cover ring-1 ring-black/10">
-                                <label :class="['flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-[11px] font-semibold', theme === 'dark' ? 'border-[#3b4d70] text-[#91d2ff]' : 'border-[#d8e0f3] text-[#315bd7]', discountPhotoBusy ? 'pointer-events-none opacity-60' : '']">
-                                    <i class="fa-solid fa-camera text-[10px]"></i> {{ discountPhotoBusy ? t('item.discount.photoBusy') : (discountForm.photo ? t('item.discount.photoChange') : t('item.discount.photo')) }}
-                                    <input type="file" accept="image/*" class="hidden" @change="onDiscountPhotoPick" :disabled="discountPhotoBusy">
-                                </label>
-                                <button v-if="discountForm.photo" type="button" @click="removeDiscountPhoto" class="flex h-9 items-center gap-1.5 rounded-lg border border-[#e11d48]/30 px-3 text-[11px] font-semibold text-[#e11d48]">
-                                    <i class="fa-regular fa-trash-can text-[10px]"></i> {{ t('item.discount.photoRemove') }}
-                                </button>
-                            </div>
-                            <p v-if="discountPhotoError" class="mt-1 text-[10.5px] font-normal text-[#b45309] dark:text-[#fbbf24]">{{ discountPhotoError }}</p>
-                            <p v-else :class="['mt-1 text-[10px] font-normal', theme === 'dark' ? 'text-[#aab8d5]' : 'text-[#7281a4]']">{{ t('item.discount.photoHint') }}</p>
+                            <template v-if="photoEdit">
+                                <canvas ref="photoCanvas" width="640" height="404" role="img" :aria-label="t('item.discount.frameAria')"
+                                        @pointerdown="onPhotoPointerDown" @pointermove="onPhotoPointerMove" @pointerup="onPhotoPointerUp" @pointercancel="onPhotoPointerUp" @wheel.prevent="onPhotoWheel"
+                                        class="mt-1.5 block w-full cursor-grab rounded-xl ring-1 ring-black/10" style="aspect-ratio: 1.586; touch-action: none"></canvas>
+                                <div :class="['mt-2 flex gap-1 rounded-lg border p-1', theme === 'dark' ? 'border-[#3b4d70]' : 'border-[#d8e0f3]']" role="group" :aria-label="t('item.discount.modeLabel')">
+                                    <button type="button" @click="setPhotoMode('cover')" :aria-pressed="photoEdit.mode === 'cover'" :class="['h-8 flex-1 rounded-md text-[11px] font-semibold', photoEdit.mode === 'cover' ? 'bg-[#315bd7] text-white' : (theme === 'dark' ? 'text-[#91d2ff]' : 'text-[#315bd7]')]">{{ t('item.discount.mode.cover') }}</button>
+                                    <button type="button" @click="setPhotoMode('contain')" :aria-pressed="photoEdit.mode === 'contain'" :class="['h-8 flex-1 rounded-md text-[11px] font-semibold', photoEdit.mode === 'contain' ? 'bg-[#315bd7] text-white' : (theme === 'dark' ? 'text-[#91d2ff]' : 'text-[#315bd7]')]">{{ t('item.discount.mode.contain') }}</button>
+                                </div>
+                                <div class="mt-2 flex items-center gap-2">
+                                    <i class="fa-solid fa-magnifying-glass-minus text-[10px]" aria-hidden="true"></i>
+                                    <input type="range" min="1" max="4" step="0.01" v-model.number="photoEdit.zoom" :aria-label="t('item.discount.zoom')" class="h-6 flex-1" style="accent-color: #6d8df0">
+                                    <i class="fa-solid fa-magnifying-glass-plus text-[10px]" aria-hidden="true"></i>
+                                </div>
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    <button type="button" @click="applyPhotoEdit" class="flex h-9 items-center gap-1.5 rounded-lg bg-[#315bd7] px-3 text-[11px] font-semibold text-white"><i class="fa-solid fa-check text-[10px]"></i> {{ t('item.discount.frameApply') }}</button>
+                                    <button type="button" @click="resetPhotoEdit" :class="['flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[11px] font-semibold', theme === 'dark' ? 'border-[#3b4d70] text-[#91d2ff]' : 'border-[#d8e0f3] text-[#315bd7]']"><i class="fa-solid fa-rotate-left text-[10px]"></i> {{ t('item.discount.frameReset') }}</button>
+                                    <button type="button" @click="closePhotoEdit" :class="['flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[11px] font-semibold', theme === 'dark' ? 'border-[#3b4d70] text-[#91d2ff]' : 'border-[#d8e0f3] text-[#315bd7]']">{{ t('common.cancel') }}</button>
+                                </div>
+                                <p v-if="discountPhotoError" class="mt-1 text-[10.5px] font-normal text-[#b45309] dark:text-[#fbbf24]">{{ discountPhotoError }}</p>
+                                <p v-else :class="['mt-1 text-[10px] font-normal', theme === 'dark' ? 'text-[#aab8d5]' : 'text-[#7281a4]']">{{ t('item.discount.frameHint') }}</p>
+                            </template>
+                            <template v-else>
+                                <div v-if="discountForm.photo" class="mt-1.5">
+                                    <img :src="discountForm.photo" :alt="t('item.discount.photoAlt')" class="block w-full max-w-[260px] rounded-xl object-cover ring-1 ring-black/10" style="aspect-ratio: 1.586">
+                                </div>
+                                <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                                    <label :class="['flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-[11px] font-semibold', theme === 'dark' ? 'border-[#3b4d70] text-[#91d2ff]' : 'border-[#d8e0f3] text-[#315bd7]', discountPhotoBusy ? 'pointer-events-none opacity-60' : '']">
+                                        <i class="fa-solid fa-camera text-[10px]"></i> {{ discountPhotoBusy ? t('item.discount.photoBusy') : (discountForm.photo ? t('item.discount.photoChange') : t('item.discount.photo')) }}
+                                        <input type="file" accept="image/*" class="hidden" @change="onDiscountPhotoPick" :disabled="discountPhotoBusy">
+                                    </label>
+                                    <button v-if="discountForm.photo" type="button" @click="removeDiscountPhoto" class="flex h-9 items-center gap-1.5 rounded-lg border border-[#e11d48]/30 px-3 text-[11px] font-semibold text-[#e11d48]">
+                                        <i class="fa-regular fa-trash-can text-[10px]"></i> {{ t('item.discount.photoRemove') }}
+                                    </button>
+                                </div>
+                                <p v-if="discountPhotoError" class="mt-1 text-[10.5px] font-normal text-[#b45309] dark:text-[#fbbf24]">{{ discountPhotoError }}</p>
+                                <p v-else :class="['mt-1 text-[10px] font-normal', theme === 'dark' ? 'text-[#aab8d5]' : 'text-[#7281a4]']">{{ discountForm.photo ? t('item.discount.photoSavedHint') : t('item.discount.photoHint') }}</p>
+                            </template>
                         </div>
                     </template>
 

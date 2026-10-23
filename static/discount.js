@@ -141,7 +141,7 @@
     function isServiceField(f) { return !!f && [FORMAT_FIELD, EXPIRY_FIELD, COLOR_FIELD, PHOTO_FIELD].includes(f.label); }
 
     // Сжатие фото карты. env даёт доступ к DOM (в тестах подменяется):
-    //   decode(file) → Promise<{ width, height, draw(ctx, w, h), close() }> (EXIF-поворот уже применён),
+    //   decode(file) → Promise<{ width, height, draw(ctx, w, h, x = 0, y = 0), close() }> (EXIF-поворот уже применён),
     //   canvas(w, h) → { getContext(), toDataURL(type, q) }.
     // Результат: { value: dataURL } или { error: код } (discount.err.*). Сеть не используется.
     async function compressPhoto(file, env) {
@@ -175,7 +175,72 @@
         }
     }
 
-    const api = { FORMATS, FORMAT_FIELD, EXPIRY_FIELD, COLOR_FIELD, PHOTO_FIELD, PALETTES, PHOTO_MAX_SIDE, PHOTO_MAX_CHARS, defaultColorId, paletteFor, cardBackground, isValidPhoto, compressPhoto, normalizeFormat, compactNumber, eanCheckDigit, eanValid, resolveCode, splitFields, joinFields, isServiceField };
+    // ---- Редактор кадра фото ----
+    // Кадр — окно карточки CARD_ASPECT:1. Режим "cover" заполняет окно (по умолчанию), "contain" вписывает фото целиком (поля заливаются градиентом палитры).
+    // Смещение panX/panY хранится долями размера окна, поэтому одинаково для превью и для итогового кадра.
+    const CARD_ASPECT = 1.586;
+    const ZOOM_MIN = 1, ZOOM_MAX = 4;
+    const OUT_WIDTHS = [PHOTO_MAX_SIDE, 640, 512, 400];
+    function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+    function frameHeight(w) { return Math.max(1, Math.round(w / CARD_ASPECT)); }
+
+    // Прямоугольник фото внутри окна fw×fh (px окна): { x, y, w, h } и приведённые к границам zoom/panX/panY.
+    // cover: фото всегда перекрывает окно целиком; contain: фото не выходит за окно, пока оно меньше окна по стороне.
+    function frameRect(iw, ih, fw, fh, mode, zoom, panX, panY) {
+        const base = mode === "contain" ? Math.min(fw / iw, fh / ih) : Math.max(fw / iw, fh / ih);
+        const z = clamp(Number(zoom) || 1, ZOOM_MIN, ZOOM_MAX);
+        const w = iw * base * z, h = ih * base * z;
+        const mx = Math.abs(w - fw) / 2 / fw, my = Math.abs(h - fh) / 2 / fh;
+        const px = clamp(Number(panX) || 0, -mx, mx), py = clamp(Number(panY) || 0, -my, my);
+        return { x: (fw - w) / 2 + px * fw, y: (fh - h) / 2 + py * fh, w, h, zoom: z, panX: px, panY: py };
+    }
+
+    // Рисует кадр в ctx размером w×h: фон (градиент палитры в contain, белый в cover), затем фото; EXIF уже учтён в img.draw
+    function drawFrame(ctx, img, view, w, h, palette) {
+        const r = frameRect(img.width, img.height, w, h, view.mode, view.zoom, view.panX, view.panY);
+        if (view.mode === "contain" && palette && ctx.createLinearGradient) {
+            // как CSS linear-gradient(135deg): линия градиента через центр, длина |w·sin|+|h·cos|
+            const k = Math.SQRT1_2, half = (w * k + h * k) / 2;
+            const g = ctx.createLinearGradient(w / 2 - k * half, h / 2 - k * half, w / 2 + k * half, h / 2 + k * half);
+            g.addColorStop(0, palette.from); g.addColorStop(1, palette.to);
+            ctx.fillStyle = g;
+        } else ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, w, h);
+        img.draw(ctx, r.w, r.h, r.x, r.y);
+        return r;
+    }
+
+    // Итоговый кадр → JPEG data URL в бюджете PHOTO_MAX_CHARS (ширина 800, при необходимости меньше)
+    function exportFrame(img, view, palette, env) {
+        try {
+            if (!(img && img.width > 0 && img.height > 0)) return { error: "photoDecode" };
+            for (const w of OUT_WIDTHS) {
+                const h = frameHeight(w);
+                const cv = env.canvas(w, h);
+                drawFrame(cv.getContext("2d"), img, view, w, h, palette);
+                for (const q of PHOTO_QUALITIES) {
+                    const url = cv.toDataURL("image/jpeg", q);
+                    if (!url.startsWith(PHOTO_PREFIX)) return { error: "photoCompress" };
+                    if (url.length <= PHOTO_MAX_CHARS) return { value: url };
+                }
+            }
+        } catch (e) { /* fall through */ }
+        return { error: "photoCompress" };
+    }
+
+    // Проверка и декодирование выбранного файла для редактора: { img } или { error }
+    async function loadPhoto(file, env) {
+        if (!file || !/^image\/(?!svg)/i.test(file.type || "")) return { error: "photoNotImage" };
+        if (file.size > PHOTO_MAX_INPUT_BYTES) return { error: "photoTooBig" };
+        try {
+            const img = await env.decode(file);
+            if (img && img.width > 0 && img.height > 0) return { img };
+            try { if (img && img.close) img.close(); } catch (e) { }
+        } catch (e) { /* below */ }
+        return { error: "photoDecode" };
+    }
+
+    const api = { FORMATS, FORMAT_FIELD, EXPIRY_FIELD, COLOR_FIELD, PHOTO_FIELD, PALETTES, PHOTO_MAX_SIDE, PHOTO_MAX_CHARS, CARD_ASPECT, ZOOM_MIN, ZOOM_MAX, frameRect, drawFrame, exportFrame, loadPhoto, defaultColorId, paletteFor, cardBackground, isValidPhoto, compressPhoto, normalizeFormat, compactNumber, eanCheckDigit, eanValid, resolveCode, splitFields, joinFields, isServiceField };
     if (typeof module !== "undefined" && module.exports) module.exports = api;
     else root.FravashiDiscount = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -1,6 +1,6 @@
 // Версия сборки: кэш браузера чистится только при смене версии (иначе ломается офлайн-запуск).
 // При каждом обновлении файла на сервере увеличивайте это значение.
-const APP_BUILD = "2026-10-23-13";
+const APP_BUILD = "2026-10-23-14";
 
 // Миграция localStorage после переименования проекта (aegis_* → fravashi_*).
 // Выполняется до любых чтений. offline_auth_* / offline_vault_* имён не меняли, офлайн-копия сохраняется.
@@ -35,7 +35,7 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-const { createApp, ref, computed, onMounted, nextTick } = Vue;
+const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
 const ITEM_TYPES = ["login", "card", "discount", "wifi", "note"];
 
 // Локализация: словари static/i18n/*.js подключаются до app.js и кладут себя в window.FRAVASHI_I18N[язык].
@@ -1009,7 +1009,7 @@ createApp({
                 if (window.createImageBitmap) {
                     try {
                         const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
-                        return { width: bmp.width, height: bmp.height, draw: (ctx, w, h) => ctx.drawImage(bmp, 0, 0, w, h), close: () => bmp.close() };
+                        return { width: bmp.width, height: bmp.height, draw: (ctx, w, h, x = 0, y = 0) => ctx.drawImage(bmp, x, y, w, h), close: () => bmp.close() };
                     } catch (e) { /* older browser: fall back to <img> */ }
                 }
                 const url = await new Promise((resolve, reject) => {
@@ -1024,7 +1024,7 @@ createApp({
                     im.onerror = () => reject(new Error("decode"));
                     im.src = url;
                 });
-                return { width: img.naturalWidth, height: img.naturalHeight, draw: (ctx, w, h) => ctx.drawImage(img, 0, 0, w, h), close() { } };
+                return { width: img.naturalWidth, height: img.naturalHeight, draw: (ctx, w, h, x = 0, y = 0) => ctx.drawImage(img, x, y, w, h), close() { } };
             },
             canvas(w, h) {
                 const c = document.createElement("canvas");
@@ -1032,6 +1032,31 @@ createApp({
                 return c;
             }
         };
+        // Редактор кадра: декодированное фото живёт вне реактивного состояния (ImageBitmap нельзя оборачивать в Proxy), в photoEdit — только вид
+        const photoEdit = ref(null);   // { mode: "cover" | "contain", zoom, panX, panY } пока открыт редактор
+        const photoCanvas = ref(null);
+        const PHOTO_PREVIEW_W = 640;
+        let photoImg = null;
+        let photoDrag = null;
+        const formPalette = computed(() => window.FravashiDiscount.paletteFor(itemForm.value.title, discountForm.value.color));
+        function closePhotoEdit() {
+            try { if (photoImg && photoImg.close) photoImg.close(); } catch (e) { }
+            photoImg = null; photoEdit.value = null; photoDrag = null;
+        }
+        function renderPhotoEdit() {
+            const cv = photoCanvas.value, view = photoEdit.value;
+            if (!cv || !photoImg || !view) return;
+            const D = window.FravashiDiscount;
+            const w = PHOTO_PREVIEW_W, h = Math.round(w / D.CARD_ASPECT);
+            if (cv.width !== w) { cv.width = w; cv.height = h; }
+            const r = D.drawFrame(cv.getContext("2d"), photoImg, view, w, h, formPalette.value);
+            // границы применяются к состоянию, чтобы ползунок и перетаскивание не уходили за пределы
+            if (r.zoom !== view.zoom) view.zoom = r.zoom;
+            if (r.panX !== view.panX) view.panX = r.panX;
+            if (r.panY !== view.panY) view.panY = r.panY;
+        }
+        watch([photoEdit, formPalette], () => nextTick(renderPhotoEdit), { deep: true, flush: "post" });
+        watch(showItemModal, (open) => { if (!open) closePhotoEdit(); });
         async function onDiscountPhotoPick(e) {
             const file = e.target.files && e.target.files[0];
             e.target.value = "";   // тот же файл можно выбрать повторно
@@ -1039,12 +1064,41 @@ createApp({
             discountPhotoError.value = "";
             discountPhotoBusy.value = true;
             try {
-                const r = await window.FravashiDiscount.compressPhoto(file, photoEnv);
+                const r = await window.FravashiDiscount.loadPhoto(file, photoEnv);
                 if (r.error) discountPhotoError.value = t("discount.err." + r.error);
-                else discountForm.value.photo = r.value;
+                else { closePhotoEdit(); photoImg = r.img; photoEdit.value = { mode: "cover", zoom: 1, panX: 0, panY: 0 }; }
             } finally { discountPhotoBusy.value = false; }
         }
-        function removeDiscountPhoto() { discountForm.value.photo = ""; discountPhotoError.value = ""; }
+        function resetPhotoEdit() { photoEdit.value = { mode: "cover", zoom: 1, panX: 0, panY: 0 }; }
+        function setPhotoMode(m) { if (photoEdit.value) photoEdit.value.mode = m; }
+        function onPhotoPointerDown(e) {
+            if (!photoEdit.value || (e.pointerType === "mouse" && e.button !== 0)) return;
+            const box = e.currentTarget.getBoundingClientRect();
+            photoDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, panX: photoEdit.value.panX, panY: photoEdit.value.panY, bw: box.width, bh: box.height };
+            try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { }
+        }
+        function onPhotoPointerMove(e) {
+            if (!photoDrag || photoDrag.id !== e.pointerId || !photoEdit.value) return;
+            photoEdit.value.panX = photoDrag.panX + (e.clientX - photoDrag.x) / photoDrag.bw;
+            photoEdit.value.panY = photoDrag.panY + (e.clientY - photoDrag.y) / photoDrag.bh;
+        }
+        function onPhotoPointerUp(e) { if (photoDrag && photoDrag.id === e.pointerId) photoDrag = null; }
+        function onPhotoWheel(e) {
+            if (!photoEdit.value) return;
+            const D = window.FravashiDiscount;
+            photoEdit.value.zoom = Math.min(D.ZOOM_MAX, Math.max(D.ZOOM_MIN, photoEdit.value.zoom * Math.exp(-e.deltaY * 0.0015)));
+        }
+        // Итоговый кадр рисуется заново в 800 px (не из превью); при сохранении записи открытый редактор применяется сам
+        function applyPhotoEdit() {
+            if (!photoEdit.value || !photoImg) return true;
+            const r = window.FravashiDiscount.exportFrame(photoImg, photoEdit.value, formPalette.value, photoEnv);
+            if (r.error) { discountPhotoError.value = t("discount.err." + r.error); return false; }
+            discountForm.value.photo = r.value;
+            discountPhotoError.value = "";
+            closePhotoEdit();
+            return true;
+        }
+        function removeDiscountPhoto() { closePhotoEdit(); discountForm.value.photo = ""; discountPhotoError.value = ""; }
         function discountErrorText(r) {
             return t("discount.err." + r.error, { ...r.params, format: t("discount.format." + r.format) });
         }
@@ -2118,6 +2172,7 @@ createApp({
             cardForm.value = { expiry: "", holder: "", pin: "", labels: {} };
             discountForm.value = { format: "auto", expiry: "", color: "", photo: "" };
             discountPhotoError.value = ""; discountPhotoBusy.value = false;
+            closePhotoEdit();
         }
         // Срок/владелец/ПИН карты и формат/срок дисконтной карты: из доп. полей — в отдельные поля формы и обратно
         function moveTypeFieldsToForm(type) {
@@ -2198,6 +2253,7 @@ createApp({
             const keyToUse = (itemForm.value.scope === 'family' && familyKey) ? familyKey : vaultKey;
             // Схема записи прежняя: отдельные поля формы карты собираются обратно в доп. поля
             const data = { ...itemForm.value };
+            if (data.itemType === "discount" && !applyPhotoEdit()) return;
             data.customFields = joinTypeFields(data.itemType, data.customFields);
             const { ciphertext, iv } = await encryptData(keyToUse, data);
             const payload = {
@@ -2674,7 +2730,7 @@ createApp({
             isAndroidAppUrl, extractAndroidPkg, getWorkingWebUrl, getGooglePlayUrl, generateWifiQrSvg, activeCardData,
             activeSubCardIdx, subCardsViewAll, isMultiCard, showSingleView, deleteSelectedInGroup,
             formatCardNumber, detectCardBrand, cardExtra,
-            discountForm, discountCheck, discountExtra, discountPalette, discountCardStyle, discountPalettes: window.FravashiDiscount.PALETTES, formPaletteId, discountPhotoBusy, discountPhotoError, onDiscountPhotoPick, removeDiscountPhoto, discountCode, discountErrorText, isHiddenCustomField, visibleCustomFieldCount,
+            discountForm, discountCheck, discountExtra, discountPalette, discountCardStyle, discountPalettes: window.FravashiDiscount.PALETTES, formPaletteId, discountPhotoBusy, discountPhotoError, onDiscountPhotoPick, removeDiscountPhoto, photoEdit, photoCanvas, resetPhotoEdit, setPhotoMode, applyPhotoEdit, closePhotoEdit, onPhotoPointerDown, onPhotoPointerMove, onPhotoPointerUp, onPhotoWheel, discountCode, discountErrorText, isHiddenCustomField, visibleCustomFieldCount,
             discountFullscreen, discountFullscreenRef, openDiscountFullscreen, closeDiscountFullscreen,
             shownPwds, toggleShownPwd, customFieldKey, isSecretFieldLabel, pwnedKey, pwnedInfo, checkPwned,
             idleSecondsLeft, idleLabel,

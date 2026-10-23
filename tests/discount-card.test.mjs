@@ -158,3 +158,129 @@ test("CSP разрешает data:-картинки, а в шаблоне фот
     assert.ok(read("main.rs").includes("img-src 'self' data: blob:"));
     assert.ok(read("index.html").includes(':src="discountExtra.photo"'));
 });
+
+// ---- Редактор кадра фото ----
+const near = (a, b, m) => assert.ok(Math.abs(a - b) < 1e-6, `${m || ""}: ${a} ≠ ${b}`);
+const FW = 800, FH = Math.round(800 / d.CARD_ASPECT);
+
+test("кадр cover: фото заполняет окно, края не открываются", () => {
+    for (const [iw, ih] of [[4000, 3000], [3000, 4000], [800, 504], [100, 100], [5000, 500]]) {
+        for (const zoom of [1, 1.7, 4]) {
+            for (const pan of [-5, -0.2, 0, 0.3, 5]) {
+                const r = d.frameRect(iw, ih, FW, FH, "cover", zoom, pan, -pan);
+                assert.ok(r.w >= FW - 1e-6 && r.h >= FH - 1e-6, "перекрывает окно");
+                assert.ok(r.x <= 1e-6 && r.y <= 1e-6 && r.x + r.w >= FW - 1e-6 && r.y + r.h >= FH - 1e-6, `${iw}x${ih} z${zoom} p${pan}`);
+                near(r.w / r.h, iw / ih, "пропорции фото");
+            }
+        }
+    }
+    const wide = d.frameRect(5000, 500, FW, FH, "cover", 1, 0, 0);   // шире окна → по высоте впритык
+    near(wide.h, FH); assert.ok(wide.w > FW);
+    const tall = d.frameRect(3000, 4000, FW, FH, "cover", 1, 0, 0);  // выше окна → по ширине впритык
+    near(tall.w, FW); assert.ok(tall.h > FH);
+});
+
+test("кадр contain: фото целиком в окне, поля с двух сторон", () => {
+    const r = d.frameRect(3000, 4000, FW, FH, "contain", 1, 0, 0);
+    near(r.h, FH); assert.ok(r.w < FW);
+    near(r.x, (FW - r.w) / 2, "по центру"); near(r.y, 0);
+    const w = d.frameRect(5000, 500, FW, FH, "contain", 1, 0, 0);
+    near(w.w, FW); assert.ok(w.h < FH);
+    const z = d.frameRect(3000, 4000, FW, FH, "contain", 4, 0, 0);
+    assert.ok(z.w > FW && z.h > FH);
+});
+
+test("кадр: границы перемещения и масштаба", () => {
+    const base = d.frameRect(5000, 500, FW, FH, "cover", 1, 0, 0);
+    const maxPanX = (base.w - FW) / 2 / FW;
+    const far = d.frameRect(5000, 500, FW, FH, "cover", 1, 99, -99);
+    near(far.panX, maxPanX, "panX к границе"); near(far.panY, 0, "по высоте двигаться некуда");
+    near(far.x, 0); near(d.frameRect(5000, 500, FW, FH, "cover", 1, -99, 0).x + base.w, FW);
+    assert.equal(d.frameRect(100, 100, FW, FH, "cover", 0.2, 0, 0).zoom, 1);
+    assert.equal(d.frameRect(100, 100, FW, FH, "cover", 50, 0, 0).zoom, 4);
+    assert.equal(d.frameRect(100, 100, FW, FH, "cover", "x", "y", NaN).zoom, 1);
+    const z2 = d.frameRect(5000, 500, FW, FH, "cover", 2, 0, 0);
+    near(z2.h, base.h * 2); near(z2.w, base.w * 2);
+    assert.ok(d.frameRect(5000, 500, FW, FH, "cover", 2, 0, 99).panY > 0);
+    const c = d.frameRect(3000, 4000, FW, FH, "contain", 1, 99, 99);
+    assert.ok(c.x >= -1e-6 && c.x + c.w <= FW + 1e-6 && c.y >= -1e-6 && c.y + c.h <= FH + 1e-6);
+    const a = d.frameRect(4000, 3000, 640, 404, "cover", 2, 0.1, 0), b = d.frameRect(4000, 3000, 800, 504, "cover", 2, 0.1, 0);
+    near(a.x / 640, b.x / 800, "x в долях"); near(a.w / 640, b.w / 800, "w в долях");
+});
+
+function frameEnv({ bytesAt = (w, h, q) => Math.round(w * h * q * 0.3), png = false } = {}) {
+    const log = { canvases: [], calls: [], gradients: [] };
+    return {
+        log,
+        canvas(w, h) {
+            log.canvases.push([w, h]);
+            const ctx = {
+                fillRect(...a) { log.calls.push(["fillRect", a, ctx.fillStyle]); },
+                createLinearGradient(...a) { const g = { a, stops: [], addColorStop(o, c) { g.stops.push([o, c]); } }; log.gradients.push(g); return g; },
+                fillStyle: ""
+            };
+            return { getContext: () => ctx, toDataURL: (t, q) => (png ? "data:image/png;base64,AAAA" : "data:image/jpeg;base64," + "A".repeat(bytesAt(w, h, q))) };
+        }
+    };
+}
+const fakeImg = (width, height, log) => ({ width, height, draw(ctx, w, h, x, y) { log.push([w, h, x, y]); } });
+
+test("итоговый кадр: 800 px в пропорциях карточки, JPEG, в бюджете, cover рисуется на белом", () => {
+    const env = frameEnv(), drawn = [];
+    const r = d.exportFrame(fakeImg(5000, 500, drawn), { mode: "cover", zoom: 1, panX: 0, panY: 0 }, d.PALETTES[0], env);
+    assert.match(r.value, /^data:image\/jpeg;base64,/);
+    assert.ok(d.isValidPhoto(r.value) && r.value.length <= d.PHOTO_MAX_CHARS);
+    assert.deepEqual(env.log.canvases[0], [800, 504]);
+    assert.equal(env.log.gradients.length, 0, "в cover градиента нет");
+    assert.equal(env.log.calls[0][2], "#fff");
+    const [w, h, x, y] = drawn[0];
+    near(h, 504); near(y, 0); near(x, (800 - w) / 2);
+});
+
+test("итоговый кадр contain: поля заливаются градиентом палитры, фото целиком", () => {
+    const env = frameEnv(), drawn = [], pal = d.PALETTES[2];
+    d.exportFrame(fakeImg(3000, 4000, drawn), { mode: "contain", zoom: 1, panX: 0, panY: 0 }, pal, env);
+    const g = env.log.gradients[0];
+    assert.deepEqual(g.stops, [[0, pal.from], [1, pal.to]]);
+    const [x0, y0, x1, y1] = g.a;
+    // как CSS 135°: угол 45°, линия симметрична относительно центра, углы кадра попадают на концы градиента
+    assert.ok(x0 < x1 && y0 < y1);
+    near(x1 - x0, y1 - y0, "45°"); near((x0 + x1) / 2, 400); near((y0 + y1) / 2, 252);
+    near(x1 - x0, (800 + 504) / 2, "длина линии = (w + h)·sin45°, проекция на ось");
+    assert.equal(env.log.calls[0][2], g);
+    const [w, h, x] = drawn[0];
+    near(h, 504); assert.ok(w < 800); near(x, (800 - w) / 2);
+});
+
+test("итоговый кадр: тяжёлое фото уменьшается по ширине, невозможное и не-JPEG — ошибка", () => {
+    const view = { mode: "cover", zoom: 1, panX: 0, panY: 0 };
+    const hard = frameEnv({ bytesAt: (w, h, q) => (w > 600 ? 900000 : Math.round(w * h * q * 0.3)) });
+    const r = d.exportFrame(fakeImg(2000, 1500, []), view, d.PALETTES[0], hard);
+    assert.ok(r.value && r.value.length <= d.PHOTO_MAX_CHARS);
+    assert.ok(hard.log.canvases.length > 1 && hard.log.canvases.at(-1)[0] < 800);
+    assert.ok(hard.log.canvases.every(([w, h]) => Math.abs(w / h - d.CARD_ASPECT) < 0.01), "пропорции карточки на всех размерах");
+    assert.deepEqual(d.exportFrame(fakeImg(10, 10, []), view, d.PALETTES[0], frameEnv({ bytesAt: () => 900000 })), { error: "photoCompress" });
+    assert.deepEqual(d.exportFrame(fakeImg(10, 10, []), view, d.PALETTES[0], frameEnv({ png: true })), { error: "photoCompress" });
+    assert.deepEqual(d.exportFrame(null, view, d.PALETTES[0], frameEnv()), { error: "photoDecode" });
+});
+
+test("loadPhoto: проверка файла и декодирования", async () => {
+    const ok = fakeEnv({ width: 10, height: 10 });
+    assert.equal((await d.loadPhoto(imgFile(), ok)).img.width, 10);
+    assert.deepEqual(await d.loadPhoto(imgFile("application/pdf"), ok), { error: "photoNotImage" });
+    assert.deepEqual(await d.loadPhoto(imgFile("image/jpeg", 50 * 1024 * 1024), ok), { error: "photoTooBig" });
+    assert.deepEqual(await d.loadPhoto(imgFile(), fakeEnv({ decodeFails: true })), { error: "photoDecode" });
+    const zero = fakeEnv({ width: 0, height: 0 });
+    assert.deepEqual(await d.loadPhoto(imgFile(), zero), { error: "photoDecode" });
+    assert.equal(zero.log.closed, 1, "битое изображение освобождается");
+});
+
+test("редактор кадра: разметка, строки ru/en, версия сборки", () => {
+    const html = read("index.html"), app = read("static/app.js");
+    for (const s of ['ref="photoCanvas"', '@pointerdown="onPhotoPointerDown"', '@wheel.prevent="onPhotoWheel"', 'v-model.number="photoEdit.zoom"', "setPhotoMode('contain')", '@click="resetPhotoEdit"', "photoSavedHint"]) assert.ok(html.includes(s), s);
+    assert.ok(app.includes("applyPhotoEdit()") && /APP_BUILD = "2026-10-23-14"/.test(app));
+    for (const lang of ["ru", "en"]) {
+        const src = read(`static/i18n/${lang}.js`);
+        for (const k of ["photoSavedHint", "frameHint", "frameApply", "frameReset", "frameAria", "modeLabel", "mode.cover", "mode.contain", "zoom"]) assert.ok(src.includes(`"item.discount.${k}"`), `${lang}:${k}`);
+    }
+});
