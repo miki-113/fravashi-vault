@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+[v-cloak] { display: none !important; }
+* { box-sizing: border-box; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(130, 145, 182, 0.35); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(130, 145, 182, 0.55); }
+
+.auth-art-bg {
+    background: radial-gradient(circle at 35% 35%, #243b6b 0%, #172647 55%, #0d162b 100%);
+}
+.ring-cw { transform-origin: 256px 256px; animation: spinCW 24s linear infinite; }
+.ring-ccw { transform-origin: 256px 256px; animation: spinCCW 16s linear infinite; }
+.shield-levitate { animation: shieldHover 4s ease-in-out infinite; filter: drop-shadow(0 20px 35px rgba(37, 99, 235, 0.48)); }
+@keyframes spinCW { 100% { transform: rotate(360deg); } }
+@keyframes spinCCW { 100% { transform: rotate(-360deg); } }
+@keyframes shieldHover { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-12px); } }
+
+/* Безопасные отступы для iPhone / PWA (чтобы шапка не залезала под часы 14:46 и батарею) */
+.safe-top-header {
+    padding-top: max(10px, env(safe-area-inset-top));
+    min-height: calc(60px + env(safe-area-inset-top));
+}
+.safe-top-sidebar {
+    padding-top: max(12px, env(safe-area-inset-top));
+}
+.safe-bottom-nav {
+    padding-bottom: env(safe-area-inset-bottom);
+    height: calc(58px + env(safe-area-inset-bottom));
+}
+@media (max-width: 1023px) {
+    .mobile-content-pad {
+        padding-bottom: calc(68px + env(safe-area-inset-bottom)) !important;
+    }
+    input, select, textarea {
+        font-size: 16px !important;
+    }
+}

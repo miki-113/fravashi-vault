@@ -1,0 +1,17 @@
+data/
+target/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+.env
+.env.*
+*.pem
+*.key
+*.csv
+*.zip
+fravashi_vault_backup*.json
+aegis_vault_backup*.json
+fravashi_recovery_key*.txt
+aegis_recovery_key*.txt
+.claude/

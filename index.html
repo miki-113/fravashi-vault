@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>FravashiVault</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+    <meta name="theme-color" content="#1d315b">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FravashiVault">
+
+    <link rel="stylesheet" href="/static/vendor/fonts/fonts.css">
+    <link rel="stylesheet" href="/static/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/static/app.css">
+    <script src="/static/vendor/vue.global.prod.js"></script>
+    <script src="/static/vendor/papaparse.min.js"></script>
+    <script src="/static/vendor/qrcode.js"></script>
+    <script src="/static/import-json.js"></script>
+    <script src="/static/i18n/ru.js"></script>
+    <script src="/static/i18n/en.js"></script>
+</head>
+<body class="overflow-hidden select-none">
+    <div id="app" v-cloak>
+        <div :class="[theme === 'dark' ? 'dark bg-[#121a2c] text-[#edf1ff]' : 'bg-[#eef2ff] text-[#1d2b49]', 'vault-theme h-[100dvh] w-[100vw] overflow-hidden font-sans selection:bg-[#dce5ff] flex flex-col']">
+
+            <!-- ЗАГРУЗКА -->
+            <div v-if="loading" class="flex h-full w-full items-center justify-center">
+                <div class="text-center">
+                    <i class="fa-solid fa-circle-notch fa-spin text-2xl text-[#315bd7] mb-3"></i>
+                    <div class="text-xs font-semibold text-[#7281a4]">{{ t('app.loading') }}</div>
+                </div>
+            </div>
+
+            <!-- =========================================================
+                 ЭКРАН ВХОДА С АНИМАЦИЕЙ ЩИТА И ОРБИТ
+                 ========================================================= -->
+            <div v-else-if="!sessionToken" class="flex h-[100dvh] w-full overflow-hidden">
+                <div class="hidden lg:flex w-[50%] flex-col justify-between auth-art-bg p-11 text-white relative overflow-hidden">
+                    <div class="flex items-center gap-3 relative z-10">
+                        <img src="/static/icons/icon.svg" alt="FravashiVault" class="h-10 w-10 rounded-xl shadow-sm">
+                        <div>
+                            <div class="text-[18px] font-semibold tracking-[-0.04em] text-white">FravashiVault</div>
+                            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#b9c9ee]">{{ t('auth.art.tagline') }}</div>
+                            <div class="mt-1 text-[10px] text-[#b9c9ee] opacity-80">{{ t('auth.art.fravashi') }}</div>
+                        </div>
+                    </div>
+
+                    <div class="my-auto mx-auto text-center max-w-md relative z-10">
+                        <div class="mx-auto" style="position:relative;width:235px;height:235px">
+                            <svg width="235" height="235" viewBox="0 0 512 512" fill="none" style="position:absolute;inset:0">
+                            <g class="ring-cw">
+                                <circle cx="256" cy="256" r="230" stroke="#496fe8" stroke-width="2.5" stroke-dasharray="14 10" stroke-opacity="0.7"/>
+                            </g>
+                            <g class="ring-ccw">
+                                <circle cx="256" cy="256" r="192" stroke="#f4c96b" stroke-width="1.8" stroke-dasharray="28 18" stroke-opacity="0.55"/>
+                            </g>
+                            </svg>
+                            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
+                                <img src="/static/icons/icon.svg" alt="FravashiVault" class="shield-levitate" style="width:150px;height:150px;border-radius:28px">
+                            </div>
+                        </div>
+
+                        <div class="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[10px] font-semibold text-[#f4c96b] mt-3 mb-2">
+                            <span class="h-2 w-2 rounded-full bg-[#7ee0ae]"></span> Zero-Knowledge • Rust / Axum
+                        </div>
+                        <h1 class="font-serif text-3xl leading-tight tracking-[-0.03em] text-white">
+                            {{ t('auth.art.headline') }}
+                        </h1>
+                        <p class="mt-2.5 text-xs leading-relaxed text-[#c6d3f2]" v-html="t('auth.art.descHtml')"></p>
+                    </div>
+
+                    <div class="rounded-xl border border-[#556b99]/70 bg-[#29416c]/80 p-3.5 relative z-10 flex items-center justify-between">
+                        <div class="flex items-center gap-2.5">
+                            <div class="grid h-8 w-8 place-items-center rounded-full bg-[#a4e1ca] text-[#1e594a]">
+                                <i class="fa-solid fa-lock text-xs"></i>
+                            </div>
+                            <div>
+                                <div class="text-xs font-semibold text-white">{{ t('auth.art.protected') }}</div>
+                                <div class="text-[10px] text-[#d0dbf2]">{{ t('auth.art.protectedSub') }}</div>
+                            </div>
+                        </div>
+                        <span class="text-[10px] font-mono text-[#a8edcf]">Self-hosted</span>
+                    </div>
+                </div>
+
+                <div class="flex flex-1 flex-col items-center justify-center p-5 overflow-y-auto relative safe-top-header">
+                    <div class="absolute right-5 flex items-center gap-2" style="top: max(16px, env(safe-area-inset-top));">
+                        <div class="flex items-center gap-1" role="group" :aria-label="t('lang.label')">
+                        <button v-for="l in ['ru', 'en']" :key="l" @click="setLang(l)" :aria-pressed="lang === l" :title="t('lang.name.' + l)"
+                                :class="['h-9 w-9 rounded-lg border text-[11px] font-semibold uppercase transition', lang === l ? 'border-[#315bd7] bg-[#315bd7] text-white' : (theme === 'dark' ? 'border-[#3b4c6f] bg-[#202d49] text-[#91d2ff]' : 'border-[#d8e0f3] bg-white text-[#536ca7]')]">{{ l }}</button>
+                    </div>
+                        <button @click="setTheme(theme === 'dark' ? 'light' : 'dark')" :title="t('common.theme')" :aria-label="t('common.theme')"
+                                :class="['grid h-9 w-9 place-items-center rounded-lg border transition', theme === 'dark' ? 'border-[#3b4c6f] bg-[#202d49] text-[#f5cf73]' : 'border-[#d8e0f3] bg-white text-[#536ca7]']">
+                            <i :class="theme === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon'"></i>
+                        </button>
+                    </div>
+
+                    <div :class="['w-full max-w-[400px] rounded-2xl border p-6 sm:p-7 shadow-[0_24px_90px_rgba(20,36,74,0.12)]', theme === 'dark' ? 'border-[#324260] bg-[#1a2741]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                        <div class="flex items-center gap-3 mb-4 lg:hidden">
+                            <img src="/static/icons/icon.svg" alt="FravashiVault" class="h-9 w-9 rounded-xl shadow-sm">
+                            <div>
+                                <div class="text-base font-bold">FravashiVault</div>
+                                <div class="text-[10px] opacity-70">{{ t('auth.art.fravashi') }}</div>
+                            </div>
+                        </div>
+
+                        <h2 class="font-serif text-[24px] sm:text-[26px] tracking-[-0.03em]">
+                            {{ t('auth.title.' + authMode) }}
+                        </h2>
+                        <p :class="['mt-1 mb-5 text-[11px]', theme === 'dark' ? 'text-[#aab8d5]' : 'text-[#7281a4]']">
+                            {{ t('auth.subtitle') }}
+                        </p>
+
+                        <div v-if="authMode === 'login'" class="space-y-3.5">
+                            <label class="block text-[11px] font-semibold">{{ t('auth.username') }}
+                                <input v-model="loginForm.username" type="text" placeholder="admin"
+                                       :class="['mt-1.5 h-10 w-full rounded-lg border px-3 text-[13px] font-normal outline-none focus:border-[#6d8df0]', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                            </label>
+                            <label class="block text-[11px] font-semibold">{{ t('auth.masterPassword') }}
+                                <div class="relative mt-1.5">
+                                    <input v-model="loginForm.password" :type="showLoginPwd ? 'text' : 'password'" @keyup.enter="handleLogin" placeholder="••••••••••••"
+                                           :class="['h-10 w-full rounded-lg border pl-3 pr-9 text-[13px] font-normal outline-none focus:border-[#6d8df0]', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                                    <button type="button" @click="showLoginPwd = !showLoginPwd" :aria-label="t(showLoginPwd ? 'common.hidePassword' : 'common.showPassword')" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs opacity-60 hover:opacity-100">
+                                        <i :class="showLoginPwd ? 'fa-regular fa-eye-slash' : 'fa-regular fa-eye'"></i>
+                                    </button>
+                                </div>
+                            </label>
+                            <button @click="handleLogin" class="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#315bd7] text-[12px] font-semibold text-white shadow-[0_5px_14px_rgba(49,91,215,0.28)] transition hover:bg-[#264cc4]">
+                                <i class="fa-solid fa-unlock text-xs"></i> {{ t('auth.unlock') }}
+                            </button>
+                            <div class="flex justify-between pt-2 text-[11px]">
+                                <a href="#" @click.prevent="authMode = 'register'" class="font-semibold text-[#315bd7] dark:text-[#91d2ff]">{{ t('auth.createAccount') }}</a>
+                                <a href="#" @click.prevent="authMode = 'recovery'" class="text-[#7281a4] hover:underline">{{ t('auth.recoveryKeyLink') }}</a>
+                            </div>
+                        </div>
+
+                        <div v-else-if="authMode === 'register'" class="space-y-3">
+                            <label class="block text-[11px] font-semibold">{{ t('auth.username') }}
+                                <input v-model="regForm.username" type="text" placeholder="admin"
+                                       :class="['mt-1 h-10 w-full rounded-lg border px-3 text-[13px] font-normal outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                            </label>
+                            <label class="block text-[11px] font-semibold">{{ t('auth.masterPassword') }}
+                                <input v-model="regForm.password" type="password"
+                                       :class="['mt-1 h-10 w-full rounded-lg border px-3 text-[13px] font-normal outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                            </label>
+                            <label class="block text-[11px] font-semibold">{{ t('auth.repeatPassword') }}
+                                <input v-model="regForm.passwordConfirm" type="password"
+                                       :class="['mt-1 h-10 w-full rounded-lg border px-3 text-[13px] font-normal outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                            </label>
+                            <label v-if="!hasUsers && setupTokenRequired" class="block text-[11px] font-semibold">{{ t('auth.setupToken') }}
+                                <input v-model="regForm.setupToken" type="password" autocomplete="off"
+                                       :class="['mt-1 h-10 w-full rounded-lg border px-3 font-mono text-[13px] font-normal outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                                <span class="mt-1 block font-normal text-[#7281a4]">{{ t('auth.setupTokenHint') }}</span>
+                            </label>
+                            <template v-if="hasUsers">
+                                <label class="block text-[11px] font-semibold">{{ t('auth.inviteCode') }}
+                                    <input v-model="regForm.inviteCode" type="text"
+                                           :class="['mt-1 h-10 w-full rounded-lg border px-3 font-mono text-[13px] font-normal outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                                </label>
+                                <label class="flex items-center gap-2 text-[11px] cursor-pointer pt-1">
+                                    <input type="checkbox" v-model="regForm.allowEscrow" class="accent-[#315bd7]" />
+                                    <span>{{ t('auth.allowEscrow') }}</span>
+                                </label>
+                            </template>
+                            <button @click="handleRegister" class="mt-2 h-10 w-full rounded-lg bg-[#315bd7] text-[12px] font-semibold text-white hover:bg-[#264cc4]">
+                                {{ t('auth.register') }}
+                            </button>
+                            <div class="text-center pt-1 text-[11px]">
+                                <a href="#" @click.prevent="authMode = 'login'" class="text-[#315bd7] dark:text-[#91d2ff]">{{ t('auth.backToLogin') }}</a>
+                            </div>
+                        </div>
+
+                        <div v-else class="space-y-3">
+                            <label class="block text-[11px] font-semibold">{{ t('auth.username') }}
+                                <input v-model="recForm.username" type="text"
+                                       :class="['mt-1 h-10 w-full rounded-lg border px-3 text-[13px] font-normal outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                            </label>
+                            <label class="block text-[11px] font-semibold">{{ t('auth.recoveryKey') }}
+                                <textarea v-model="recForm.recoveryKey" rows="2"
+                                          :class="['mt-1 w-full rounded-lg border p-2.5 font-mono text-[12px] font-normal outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']"></textarea>
+                            </label>
+                            <label class="block text-[11px] font-semibold">{{ t('auth.newMasterPassword') }}
+                                <input v-model="recForm.newPassword" type="password"
+                                       :class="['mt-1 h-10 w-full rounded-lg border px-3 text-[13px] font-normal outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                            </label>
+                            <button @click="handleRecoveryReset" class="mt-2 h-10 w-full rounded-lg bg-[#315bd7] text-[12px] font-semibold text-white hover:bg-[#264cc4]">
+                                {{ t('auth.restoreAccess') }}
+                            </button>
+                            <div class="text-center pt-1 text-[11px]">
+                                <a href="#" @click.prevent="authMode = 'login'" class="text-[#315bd7] dark:text-[#91d2ff]">{{ t('auth.backToLogin') }}</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- =========================================================
+                 ОСНОВНОЙ ИНТЕРФЕЙС С МОБИЛЬНОЙ АДАПТАЦИЕЙ И НАВИГАЦИЕЙ
+                 ========================================================= -->
+            <div v-else class="flex h-[100dvh] w-full overflow-hidden relative">
+
+                <!-- Затемнение при открытом боковом меню на телефоне -->
+                <div v-if="mobileNavOpen" class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs lg:hidden" @click="mobileNavOpen = false"></div>
+
+                <!-- ЛЕВЫЙ САЙДБАР (на телефоне выезжает поверх экрана с учетом safe-area) -->
+                <aside :class="[
+                    'w-[265px] lg:w-[248px] shrink-0 flex flex-col border-r z-[80] transition-transform duration-200 overflow-y-auto safe-top-sidebar',
+                    theme === 'dark' ? 'border-[#263450] bg-[#17223a]' : 'border-[#1d315b] bg-[#1d315b]',
+                    mobileNavOpen ? 'fixed inset-y-0 left-0 translate-x-0 shadow-2xl' : 'hidden lg:flex'
+                ]">
+                    <div class="flex h-[60px] shrink-0 items-center justify-between border-b border-white/[0.12] px-5 cursor-pointer" @click="setFilter('all', 'all', 'all')">
+                        <div class="flex items-center gap-3">
+                            <img src="/static/icons/icon.svg" alt="FravashiVault" class="h-9 w-9 rounded-xl shadow-sm">
+                            <div>
+                                <div class="text-[16px] font-semibold tracking-[-0.04em] text-white">FravashiVault</div>
+                                <div class="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-[#b9c9ee]">{{ t('nav.tagline') }}</div>
+                            </div>
+                        </div>
+                        <button class="lg:hidden h-8 w-8 rounded-lg bg-white/10 text-white" @click.stop="mobileNavOpen = false" :aria-label="t('nav.close')" :title="t('nav.close')">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <!-- БИБЛИОТЕКА -->
+                    <div class="px-3 pt-4">
+                        <div class="mb-2 px-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#93a8d7]">{{ t('nav.library') }}</div>
+
+                        <button @click="setFilter('all', 'all', 'all')"
+                                :class="['mb-1 flex h-9 w-full items-center gap-3 rounded-lg px-3 text-left text-[12px] transition-colors', (currentView === 'all' && currentCategory === 'all' && currentFolder === 'all' && rightPaneMode === 'item') ? 'bg-[#496fe8] font-semibold text-white shadow-[0_5px_18px_rgba(56,91,207,0.32)]' : 'text-[#d3def8] hover:bg-white/[0.09]']">
+                            <span class="grid h-6 w-6 place-items-center rounded-md bg-[#f5c968] text-[#293c68]">
+                                <i class="fa-solid fa-key text-[11px]"></i>
+                            </span>
+                            <span class="flex-1 truncate">{{ t('nav.allItems') }}</span>
+                            <span class="text-[10px] tabular-nums text-[#c6d3f2]">{{ activeItems.length }}</span>
+                        </button>
+
+                        <button @click="setFilter('all', 'favorites', 'all')"
+                                :class="['mb-1 flex h-9 w-full items-center gap-3 rounded-lg px-3 text-left text-[12px] transition-colors', (currentCategory === 'favorites' && rightPaneMode === 'item') ? 'bg-[#496fe8] font-semibold text-white shadow-[0_5px_18px_rgba(56,91,207,0.32)]' : 'text-[#d3def8] hover:bg-white/[0.09]']">
+                            <span class="grid h-6 w-6 place-items-center rounded-md bg-[#f3a7c4] text-[#642744]">
+                                <i class="fa-solid fa-star text-[11px]"></i>
+                            </span>
+                            <span class="flex-1 truncate">{{ t('nav.favorites') }}</span>
+                            <span class="text-[10px] tabular-nums text-[#c6d3f2]">{{ countFavorites }}</span>
+                        </button>
+
+                        <div class="grid grid-cols-2 gap-1 mt-1.5">
+                            <button @click="setFilter('personal', 'all', 'all')"
+                                    :class="['flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-[11px] transition-colors', (currentView === 'personal' && rightPaneMode === 'item') ? 'bg-[#496fe8] font-semibold text-white' : 'bg-white/[0.05] text-[#d3def8] hover:bg-white/[0.1]']">
+                                <i class="fa-solid fa-lock text-[10px]"></i> {{ t('nav.personal') }} ({{ countByScope('personal') }})
+                            </button>
+                            <button @click="setFilter('family', 'all', 'all')"
+                                    :class="['flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-[11px] transition-colors', (currentView === 'family' && rightPaneMode === 'item') ? 'bg-[#496fe8] font-semibold text-white' : 'bg-white/[0.05] text-[#d3def8] hover:bg-white/[0.1]']">
+                                <i class="fa-solid fa-users text-[10px]"></i> {{ t('nav.family') }} ({{ countByScope('family') }})
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- ПАПКИ ПО СФЕРАМ -->
+                    <div class="px-3 pt-4">
+                        <div class="mb-2 flex items-center justify-between px-3 cursor-pointer" @click="toggleNavSection('folders')">
+                            <span class="text-[9px] font-semibold uppercase tracking-[0.18em] text-[#93a8d7]">{{ t('nav.folders') }}</span>
+                            <div class="flex items-center gap-1">
+                                <button @click.stop="autoSortItemsIntoFolders(true)" :title="t('nav.autoSort')" :aria-label="t('nav.autoSort')" class="grid h-5 w-5 place-items-center rounded text-[#f4c96b] hover:bg-white/[0.1]">
+                                    <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
+                                </button>
+                                <button @click.stop="createNewCustomFolder" :title="t('nav.createFolder')" :aria-label="t('nav.createFolder')" class="grid h-5 w-5 place-items-center rounded text-[#c4d2f0] hover:bg-white/[0.1] hover:text-white">
+                                    <i class="fa-solid fa-plus text-[11px]"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div v-show="navSections.folders">
+                            <button v-for="fld in allFolders" :key="fld.id"
+                                    @click="setFilter('all', 'all', fld.id)"
+                                    :class="['mb-0.5 flex h-8.5 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[11.5px] transition-colors', (currentFolder === fld.id && rightPaneMode === 'item') ? 'bg-[#496fe8] font-semibold text-white shadow-[0_5px_18px_rgba(56,91,207,0.28)]' : 'text-[#d3def8] hover:bg-white/[0.09]']">
+                                <span :class="['grid h-6 w-6 shrink-0 place-items-center rounded-md', fld.tintClass]">
+                                    <i :class="[fld.icon, 'text-[11px]']"></i>
+                                </span>
+                                <span class="flex-1 truncate">{{ fld.name }}</span>
+                                <span class="text-[10px] tabular-nums text-[#c6d3f2]">{{ countByFolder(fld.id) }}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- ИНСТРУМЕНТЫ И ТИПЫ -->
+                    <div class="px-3 pt-4">
+                        <div class="mb-2 flex items-center justify-between px-3 cursor-pointer" @click="toggleNavSection('tools')">
+                            <span class="text-[9px] font-semibold uppercase tracking-[0.18em] text-[#93a8d7]">{{ t('nav.tools') }}</span>
+                            <i class="fa-solid fa-chevron-down text-[9px] text-[#93a8d7]" :style="{transform: navSections.tools ? 'rotate(0deg)' : 'rotate(-90deg)'}"></i>
+                        </div>
+
+                        <div v-show="navSections.tools" class="space-y-0.5">
+                            <button @click="setFilter('all', 'card', 'all')" :class="['flex h-8.5 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[11.5px] transition-colors', (currentCategory === 'card' && rightPaneMode === 'item') ? 'bg-[#496fe8] font-semibold text-white' : 'text-[#d3def8] hover:bg-white/[0.09]']">
+                                <span class="grid h-6 w-6 place-items-center rounded-md bg-[#c5a9ff] text-[#4c347a]"><i class="fa-regular fa-credit-card text-[11px]"></i></span>
+                                <span class="flex-1 truncate">{{ t('nav.cards') }}</span>
+                                <span class="text-[10px] text-[#c6d3f2]">{{ countByCategory('card') }}</span>
+                            </button>
+
+                            <button @click="setFilter('all', 'note', 'all')" :class="['flex h-8.5 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[11.5px] transition-colors', (currentCategory === 'note' && rightPaneMode === 'item') ? 'bg-[#496fe8] font-semibold text-white' : 'text-[#d3def8] hover:bg-white/[0.09]']">
+                                <span class="grid h-6 w-6 place-items-center rounded-md bg-[#ffd875] text-[#67511a]"><i class="fa-regular fa-note-sticky text-[11px]"></i></span>
+                                <span class="flex-1 truncate">{{ t('nav.notes') }}</span>
+                                <span class="text-[10px] text-[#c6d3f2]">{{ countByCategory('note') }}</span>
+                            </button>
+
+                            <button @click="setFilter('all', 'wifi', 'all')" :class="['flex h-8.5 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[11.5px] transition-colors', (currentCategory === 'wifi' && rightPaneMode === 'item') ? 'bg-[#496fe8] font-semibold text-white' : 'text-[#d3def8] hover:bg-white/[0.09]']">
+                                <span class="grid h-6 w-6 place-items-center rounded-md bg-[#8adbc4] text-[#205945]"><i class="fa-solid fa-wifi text-[10px]"></i></span>
+                                <span class="flex-1 truncate">{{ t('nav.wifi') }}</span>
+                                <span class="text-[10px] text-[#c6d3f2]">{{ countByCategory('wifi') }}</span>
+                            </button>
+
+                            <button @click="openFullPageMode('totp_hub')" :class="['flex h-8.5 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[11.5px] transition-colors', rightPaneMode === 'totp_hub' ? 'bg-[#496fe8] font-semibold text-white' : 'text-[#d3def8] hover:bg-white/[0.09]']">
+                                <span class="grid h-6 w-6 place-items-center rounded-md bg-[#91d2ff] text-[#214b7c]"><i class="fa-regular fa-clock text-[11px]"></i></span>
+                                <span class="flex-1 truncate">{{ t('nav.totp') }}</span>
+                                <span class="text-[10px] text-[#c6d3f2]">{{ itemsWithTotp.length }}</span>
+                            </button>
+
+                            <button @click="openDuplicatesView" :class="['flex h-8.5 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[11.5px] transition-colors', rightPaneMode === 'duplicates' ? 'bg-[#496fe8] font-semibold text-white' : 'text-[#d3def8] hover:bg-white/[0.09]']">
+                                <span class="grid h-6 w-6 place-items-center rounded-md bg-[#ffb5a6] text-[#763b39]"><i class="fa-regular fa-clone text-[11px]"></i></span>
+                                <span class="flex-1 truncate">{{ t('nav.duplicates') }}</span>
+                                <span v-if="duplicateGroups.length > 0" class="rounded-full bg-[#f4c96b] px-1.5 py-0.5 text-[9px] font-bold text-[#20325d]">{{ duplicateGroups.length }}</span>
+                            </button>
+
+                            <button @click="openWatchtowerDashboard" :class="['flex h-8.5 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[11.5px] transition-colors', rightPaneMode === 'watchtower' ? 'bg-[#496fe8] font-semibold text-white' : 'text-[#d3def8] hover:bg-white/[0.09]']">
+                                <span class="grid h-6 w-6 place-items-center rounded-md bg-[#a4e1ca] text-[#1e594a]"><i class="fa-solid fa-shield-cat text-[11px]"></i></span>
+                                <span class="flex-1 truncate">{{ t('nav.watchtower') }}</span>
+                                <span class="text-[10px] text-[#a8edcf]">{{ securityScore }}%</span>
+                            </button>
+
+                            <button @click="setFilter('all', 'trash', 'all')" :class="['flex h-8.5 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[11.5px] transition-colors', (currentCategory === 'trash' && rightPaneMode === 'item') ? 'bg-[#496fe8] font-semibold text-white' : 'text-[#d3def8] hover:bg-white/[0.09]']">
+                                <span class="grid h-6 w-6 place-items-center rounded-md bg-[#b3c8ff] text-[#2c437e]"><i class="fa-regular fa-trash-can text-[11px]"></i></span>
+                                <span class="flex-1 truncate">{{ t('nav.trash') }}</span>
+                                <span class="text-[10px] text-[#c6d3f2]">{{ trashedItems.length }}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- НИЖНЯЯ КАРТОЧКА ЗАЩИТЫ -->
+                    <div class="mt-auto p-3.5 pb-6">
+                        <div :class="['rounded-xl border p-3', theme === 'dark' ? 'border-[#405177] bg-[#202e4c]' : 'border-[#556b99] bg-[#29416c]']">
+                            <div class="mb-1.5 flex items-center gap-2">
+                                <div class="grid h-6 w-6 place-items-center rounded-full bg-[#a4e1ca] text-[#1e594a]">
+                                    <i class="fa-solid fa-lock text-[11px]"></i>
+                                </div>
+                                <div class="text-[10.5px] font-semibold text-white truncate">{{ t('nav.protectedUser', { user: displayUsername }) }}</div>
+                            </div>
+                            <div class="flex items-center justify-between gap-2">
+                                <p class="text-[9.5px] leading-[1.45] text-[#d0dbf2]">{{ t('nav.autoLockIn') }}</p>
+                                <span :class="['rounded-md px-2 py-0.5 font-mono text-[12px] font-bold tabular-nums', idleSecondsLeft <= 60 ? 'bg-[#e11d48]/25 text-[#ffb3c1]' : 'bg-white/10 text-[#a8edcf]']">{{ idleLabel }}</span>
+                            </div>
+                        </div>
+
+                        <button @click="openHomeOverview" class="mt-2 flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-left text-[11px] text-[#c4d2f0] transition hover:bg-white/[0.08] hover:text-white">
+                            <i class="fa-solid fa-sliders text-xs"></i> {{ t('nav.settings') }}
+                            <i class="fa-solid fa-chevron-right ml-auto text-[10px]"></i>
+                        </button>
+                    </div>
+                </aside>
+
+                <!-- ПРАВАЯ ОСНОВНАЯ ОБЛАСТЬ -->
+                <main class="flex min-w-0 flex-1 flex-col h-[100dvh] overflow-hidden">
+
+                    <!-- ВЕРХНИЙ ХЕДЕР С ОТСТУПОМ SAFE-AREA ПОД ЧАСЫ IPHONE -->
+                    <header :class="['safe-top-header flex shrink-0 items-center justify-between border-b px-3.5 sm:px-8 pb-2.5 gap-2', theme === 'dark' ? 'border-[#283653] bg-[#18243d]' : 'border-[#dbe2f6] bg-[#fbfcff]']">
+                        <div class="flex min-w-0 flex-1 items-center gap-2.5">
+                            <button @click="mobileNavOpen = true" class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#315bd7] text-white shadow-sm lg:hidden" :title="t('header.menu')" :aria-label="t('header.menu')">
+                                <i class="fa-solid fa-bars text-sm"></i>
+                            </button>
+                            <div class="relative flex-1 max-w-[400px]">
+                                <i :class="['fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs', theme === 'dark' ? 'text-[#91a2ca]' : 'text-[#7383ab]']"></i>
+                                <input ref="searchInputRef" v-model="searchQuery" @input="onSearchInput" @keydown.esc="searchQuery = ''"
+                                       :placeholder="t('header.search')" :aria-label="t('header.search')"
+                                       :class="['h-9 sm:h-10 w-full rounded-lg border pl-8 pr-8 text-[13px] outline-none transition focus:border-[#6d8df0]', theme === 'dark' ? 'border-[#364768] bg-[#202d49] text-[#eef1ff] placeholder:text-[#91a0c0]' : 'border-[#d8e0f3] bg-white text-[#26375e] placeholder:text-[#8997b7]']" />
+                                <button v-if="searchQuery" @click="searchQuery = ''; selectedItem = null" :aria-label="t('header.clearSearch')" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#8291b6]">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                                <span v-else :class="['hidden sm:inline absolute right-2.5 top-1/2 -translate-y-1/2 rounded border px-1.5 py-0.5 text-[9px] font-mono', theme === 'dark' ? 'border-[#425579] text-[#a7b5d6]' : 'border-[#dce3f3] text-[#8291b6]']">⌘ K</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                            <div v-if="sessionToken === 'OFFLINE_MODE'" class="hidden sm:flex h-9 items-center gap-1.5 rounded-lg border border-[#f59e0b]/50 bg-[#f59e0b]/10 px-2.5 text-[10.5px] font-semibold text-[#b9770e] dark:text-[#f5cf73]" :title="t('header.offlineHint')">
+                                <i class="fa-solid fa-plane-up text-[10px]"></i> {{ t('header.offline') }}
+                            </div>
+                            <div :class="['flex h-9 items-center gap-1.5 rounded-lg border px-2 sm:px-2.5 font-mono text-[11px] font-semibold tabular-nums transition', idleSecondsLeft <= 60 ? 'border-[#e11d48]/60 bg-[#e11d48]/10 text-[#e11d48]' : (theme === 'dark' ? 'border-[#3b4c6f] bg-[#202d49] text-[#91d2ff]' : 'border-[#d8e0f3] bg-white text-[#536ca7]')]" :title="t('header.idleHint')">
+                                <i class="fa-regular fa-clock text-[10px]"></i> {{ idleLabel }}
+                            </div>
+                            <button @click="loadVault(); showToast(t('header.refreshed'))" :title="t('header.refresh')" :aria-label="t('header.refresh')"
+                                    :class="['grid h-9 w-9 place-items-center rounded-lg border transition', theme === 'dark' ? 'border-[#3b4c6f] bg-[#202d49] text-[#91d2ff]' : 'border-[#d8e0f3] bg-white text-[#536ca7]']">
+                                <i class="fa-solid fa-rotate text-xs"></i>
+                            </button>
+                            <button @click="setTheme(theme === 'dark' ? 'light' : 'dark')" :title="t('common.theme')" :aria-label="t('common.theme')"
+                                    :class="['grid h-9 w-9 place-items-center rounded-lg border transition', theme === 'dark' ? 'border-[#3b4c6f] bg-[#202d49] text-[#f5cf73]' : 'border-[#d8e0f3] bg-white text-[#536ca7]']">
+                                <i :class="theme === 'dark' ? 'fa-solid fa-sun text-xs' : 'fa-solid fa-moon text-xs'"></i>
+                            </button>
+                            <button @click="openItemModal(null)" class="hidden sm:flex h-9 items-center gap-2 rounded-lg bg-[#315bd7] px-3.5 text-[11.5px] font-semibold text-white shadow-sm hover:bg-[#264cc4]">
+                                <i class="fa-solid fa-plus text-xs"></i> <span>{{ t('item.new') }}</span>
+                            </button>
+                            <button @click="handleLogout(false)" :title="t('header.logout')" :aria-label="t('header.logout')"
+                                    :class="['grid h-9 w-9 place-items-center rounded-lg border transition hover:text-[#e11d48]', theme === 'dark' ? 'border-[#3b4c6f] bg-[#202d49] text-[#f3a7c4]' : 'border-[#d8e0f3] bg-white text-[#7180a0]']">
+                                <i class="fa-solid fa-power-off text-xs"></i>
+                            </button>
+                        </div>
+                    </header>
+
+                    <!-- ЗАГОЛОВОК РАЗДЕЛА -->
+                    <div class="px-4 pb-2 pt-2.5 sm:px-8 sm:pt-4 shrink-0">
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-1.5 text-[10px] text-[#8493b5]">
+                                    <span class="cursor-pointer hover:underline" @click="setFilter('all', 'all', 'all')">{{ t('title.vault') }}</span>
+                                    <i class="fa-solid fa-chevron-right text-[8px]"></i>
+                                    <span class="font-semibold text-[#315bd7] dark:text-[#91d2ff] truncate">{{ rightPaneMode === 'item' ? currentTitle : rightPaneTitle }}</span>
+                                </div>
+                                <h1 class="font-serif text-[20px] sm:text-[28px] leading-tight tracking-[-0.03em] text-[#1b2a4b] dark:text-[#edf1ff] truncate">
+                                    {{ rightPaneMode === 'item' ? (currentCategory === 'all' && currentFolder === 'all' ? t('title.yourCredentials') : currentTitle) : rightPaneTitle }}
+                                </h1>
+                            </div>
+
+                            <div v-if="rightPaneMode === 'item'" class="flex items-center gap-1.5 shrink-0">
+                                <button @click="toggleMultiSelectMode"
+                                        :class="['flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10.5px] font-medium transition', multiSelectMode ? 'border-[#315bd7] bg-[#315bd7] text-white' : (theme === 'dark' ? 'border-[#39496a] bg-[#1d2a46] text-[#ccd7f3]' : 'border-[#d9e1f4] bg-[#f9faff] text-[#52678e]')]">
+                                    <i class="fa-solid fa-layer-group text-[10px]"></i> {{ multiSelectMode ? t('common.cancel') : t('list.merge') }}
+                                </button>
+                                <button @click="sortBy = sortBy === 'alpha' ? 'recent' : 'alpha'"
+                                        :class="['flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10.5px] transition', theme === 'dark' ? 'border-[#39496a] bg-[#1d2a46] text-[#ccd7f3]' : 'border-[#d9e1f4] bg-[#f9faff] text-[#52678e]']">
+                                    <i class="fa-solid fa-arrow-down-up text-[10px]"></i> {{ sortBy === 'alpha' ? t('list.sortAlpha') : t('list.sortDate') }}
+                                </button>
+                            </div>
+                            <div v-else>
+                                <button @click="setFilter('all', 'all', 'all')" class="flex h-8 items-center gap-1.5 rounded-lg bg-[#315bd7] px-3 text-[11px] font-semibold text-white">
+                                    <i class="fa-solid fa-arrow-left text-[10px]"></i> {{ t('list.backToList') }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ДВУХКОЛОНОЧНАЯ ОБЛАСТЬ (СПИСОК + КАРТОЧКА) -->
+                    <div v-if="rightPaneMode === 'item'" class="mobile-content-pad grid min-h-0 flex-1 grid-cols-1 gap-4 px-3.5 pb-3 sm:px-8 sm:pb-5 xl:grid-cols-[minmax(300px,375px)_minmax(440px,1fr)] overflow-hidden">
+
+                        <!-- ЛЕВАЯ КОЛОНКА СПИСКА ЗАПИСЕЙ -->
+                        <section :class="['flex min-h-0 flex-col overflow-hidden rounded-xl border shadow-[0_12px_36px_rgba(38,61,120,0.055)]', theme === 'dark' ? 'border-[#324260] bg-[#1a2741]' : 'border-[#dce3f4] bg-[#fffefa]', selectedItem ? 'hidden xl:flex' : 'flex']">
+                            <div :class="['flex h-[42px] shrink-0 items-center justify-between border-b px-3.5', theme === 'dark' ? 'border-[#324260]' : 'border-[#e7ebf5]']">
+                                <div class="text-[11px] font-semibold">
+                                    {{ t('list.count', { n: filteredItems.length }) }}
+                                </div>
+                                <button v-if="searchQuery || currentFolder !== 'all' || currentCategory !== 'all'" @click="resetAllFilters" class="text-[10.5px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
+                                    {{ t('list.reset') }}
+                                </button>
+                                <button v-else-if="currentCategory === 'trash' && trashedItems.length > 0" @click="emptyTrashAll" class="text-[10.5px] font-semibold text-[#e11d48]">
+                                    {{ t('trash.empty') }}
+                                </button>
+                            </div>
+
+                            <div v-if="multiSelectMode" class="border-b border-[#315bd7]/30 bg-[#315bd7]/10 px-3 py-2 flex items-center justify-between gap-2">
+                                <span class="text-[11px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">{{ t('list.selected', { n: manualSelectedIds.length }) }}</span>
+                                <div v-if="manualSelectedIds.length >= 2" class="flex gap-1.5">
+                                    <button @click="mergeManualSelectedAsMultiCard" class="rounded-md bg-[#315bd7] px-2.5 py-1 text-[10px] font-semibold text-white">{{ t('merge.toMulti') }}</button>
+                                    <button @click="mergeManualSelectedIntoOne" class="rounded-md border border-[#315bd7] px-2 py-1 text-[10px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">{{ t('merge.toOne') }}</button>
+                                </div>
+                            </div>
+
+                            <!-- Список записей с мягкой прокруткой -->
+                            <div class="min-h-0 flex-1 overflow-y-auto p-1.5 sm:p-2">
+                                <template v-if="filteredItems.length > 0">
+                                    <button v-for="item in filteredItems" :key="item.id"
+                                            @click="multiSelectMode ? toggleManualSelectId(item.id) : selectItemCard(item)"
+                                            :class="[
+                                                'group mb-1 flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors',
+                                                (selectedItem && selectedItem.id === item.id)
+                                                    ? (theme === 'dark' ? 'bg-[#2a3b5e] ring-1 ring-inset ring-[#536ea6]' : 'bg-[#e9efff] ring-1 ring-inset ring-[#c4d2fb]')
+                                                    : 'hover:bg-[#f1f4fc] dark:hover:bg-white/[0.04]'
+                                            ]">
+                                        <input v-if="multiSelectMode" type="checkbox" :checked="manualSelectedIds.includes(item.id)" @click.stop="toggleManualSelectId(item.id)" class="h-4 w-4 shrink-0 accent-[#315bd7]" />
+
+                                        <span class="relative grid h-9 w-9 shrink-0 place-items-center rounded-[11px] text-[13px] font-semibold text-white shadow-sm overflow-hidden"
+                                              :style="{ backgroundColor: getEntryColorHex(item.decrypted.title) }">
+                                            <i v-if="item.decrypted.itemType === 'note'" class="fa-regular fa-note-sticky"></i>
+                                            <i v-else-if="item.decrypted.itemType === 'card'" class="fa-regular fa-credit-card"></i>
+                                            <i v-else-if="item.decrypted.itemType === 'wifi'" class="fa-solid fa-wifi text-xs"></i>
+                                            <template v-else>
+                                                <span>{{ getInitials(decodePunycodeText(item.decrypted.title)) }}</span>
+                                                <img v-if="getFaviconUrl(item.decrypted) && !item.badFavicon"
+                                                     :src="getFaviconUrl(item.decrypted)"
+                                                     class="absolute inset-0 h-full w-full object-contain bg-white p-1 rounded-[11px]"
+                                                     @load="checkFaviconQuality($event, item)"
+                                                     @error="item.badFavicon = true">
+                                            </template>
+                                        </span>
+
+                                        <span class="min-w-0 flex-1">
+                                            <span class="flex items-center gap-1.5">
+                                                <span :class="['truncate text-[12.5px] font-semibold', theme === 'dark' ? 'text-[#edf1ff]' : 'text-[#263756]']">
+                                                    {{ decodePunycodeText(item.decrypted.title) }}
+                                                </span>
+                                                <i v-if="item.is_favorite" class="fa-solid fa-star shrink-0 text-[10px] text-[#c49b4a]"></i>
+                                                <span v-if="item.decrypted.subCards && item.decrypted.subCards.length > 0" class="shrink-0 rounded bg-[#315bd7]/15 px-1.5 py-0.2 text-[9px] font-bold text-[#315bd7] dark:text-[#91d2ff]">
+                                                    {{ tp('list.accounts', item.decrypted.subCards.length) }}
+                                                </span>
+                                            </span>
+                                            <span :class="['mt-0.5 block truncate text-[11px]', theme === 'dark' ? 'text-[#a8b7d4]' : 'text-[#7182a6]']">
+                                                {{ item.decrypted.itemType === 'note' ? (item.decrypted.note || t('list.textNote')).substring(0, 35) : (item.decrypted.username || formatDomain(item.decrypted.url)) }}
+                                            </span>
+                                        </span>
+
+                                        <i class="fa-solid fa-chevron-right text-[10px] text-[#8093c2]/60"></i>
+                                    </button>
+                                </template>
+
+                                <div v-else class="flex h-full min-h-[220px] flex-col items-center justify-center px-6 text-center">
+                                    <p class="text-[12px] font-semibold">{{ t('list.empty') }}</p>
+                                    <button @click="resetAllFilters" class="mt-2 rounded-md px-3 py-1.5 text-[11px] font-semibold text-[#315bd7] dark:text-[#b9c9ff]">
+                                        {{ t('list.showAll') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- ПРАВАЯ КАРТОЧКА ПРОСМОТРА ЗАПИСИ (Удобная адаптивная верстка на телефоне) -->
+                        <section v-if="selectedItem" :class="['min-w-0 min-h-0 flex flex-col overflow-y-auto rounded-xl border shadow-[0_12px_36px_rgba(38,61,120,0.055)]', theme === 'dark' ? 'border-[#324260] bg-[#1a2741]' : 'border-[#dce3f4] bg-[#fffefa]']">
+
+                            <!-- Мобильная панель возврата к списку -->
+                            <div class="xl:hidden sticky top-0 z-20 flex items-center justify-between border-b px-4 py-2.5 backdrop-blur-md" :class="theme === 'dark' ? 'border-[#324260] bg-[#1a2741]/95' : 'border-[#e7ebf5] bg-[#fffefa]/95'">
+                                <button @click="selectedItem = null" class="flex items-center gap-2 text-xs font-bold text-[#315bd7] dark:text-[#91d2ff] py-1">
+                                    <i class="fa-solid fa-arrow-left"></i> {{ t('list.backToList') }}
+                                </button>
+                                <div class="flex items-center gap-1.5">
+                                    <button @click="toggleFavorite(selectedItem)" :title="t('nav.favorites')" :aria-label="t('nav.favorites')" class="h-8 w-8 rounded-lg border grid place-items-center" :class="theme === 'dark' ? 'border-[#46577a] bg-[#283757]' : 'border-[#e2e7f3] bg-white'">
+                                        <i :class="[selectedItem.is_favorite ? 'fa-solid text-[#d99822]' : 'fa-regular', 'fa-star text-xs']"></i>
+                                    </button>
+                                    <button @click="openItemModal(selectedItem)" class="h-8 rounded-lg border px-2.5 text-[11px] font-semibold" :class="theme === 'dark' ? 'border-[#46577a] bg-[#283757]' : 'border-[#e2e7f3] bg-white'">
+                                        {{ t('item.edit') }}
+                                    </button>
+                                    <button v-if="!selectedItem.is_trashed" @click="moveToTrash(selectedItem)" :title="t('trash.move')" :aria-label="t('trash.move')" class="h-8 w-8 rounded-lg border grid place-items-center text-[#e11d48]" :class="theme === 'dark' ? 'border-[#46577a] bg-[#283757]' : 'border-[#e2e7f3] bg-white'">
+                                        <i class="fa-regular fa-trash-can text-xs"></i>
+                                    </button>
+                                    <template v-else>
+                                        <button @click="restoreFromTrash(selectedItem)" class="h-8 rounded-lg bg-[#10b981] px-2.5 text-[10.5px] font-semibold text-white">{{ t('trash.restoreShort') }}</button>
+                                        <button @click="deletePermanently(selectedItem.id)" class="h-8 rounded-lg bg-[#e11d48] px-2.5 text-[10.5px] font-semibold text-white">{{ t('trash.deleteShort') }}</button>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Шапка карточки -->
+                            <div :class="['flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3.5 sm:px-7', theme === 'dark' ? 'border-[#324260] bg-[#202f4e]' : 'border-[#f0f3fc] bg-[#f7f9ff]']">
+                                <div class="flex items-center gap-3 min-w-0 flex-1">
+                                    <div class="relative grid h-11 w-11 shrink-0 place-items-center rounded-[13px] text-[16px] font-semibold text-white shadow-sm overflow-hidden"
+                                         :style="{ backgroundColor: getEntryColorHex(selectedItem.decrypted.title) }">
+                                        <i v-if="selectedItem.decrypted.itemType === 'note'" class="fa-regular fa-note-sticky"></i>
+                                        <i v-else-if="selectedItem.decrypted.itemType === 'card'" class="fa-regular fa-credit-card"></i>
+                                        <i v-else-if="selectedItem.decrypted.itemType === 'wifi'" class="fa-solid fa-wifi"></i>
+                                        <template v-else>
+                                            <span>{{ getInitials(decodePunycodeText(selectedItem.decrypted.title)) }}</span>
+                                            <img v-if="getFaviconUrl(selectedItem.decrypted) && !selectedItem.badFavicon"
+                                                 :src="getFaviconUrl(selectedItem.decrypted)"
+                                                 class="absolute inset-0 h-full w-full object-contain bg-white p-1.5 rounded-[13px]"
+                                                 @load="checkFaviconQuality($event, selectedItem)"
+                                                 @error="selectedItem.badFavicon = true">
+                                        </template>
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <h2 class="text-[15px] sm:text-[16px] font-bold tracking-[-0.02em] break-all">{{ decodePunycodeText(selectedItem.decrypted.title) }}</h2>
+                                            <select :value="getItemFolderId(selectedItem)" @change="quickAssignFolder(selectedItem, $event.target.value)"
+                                                    :class="['rounded-full px-2.5 py-0.5 text-[10px] font-medium outline-none cursor-pointer border-none', theme === 'dark' ? 'bg-[#35466a] text-[#d5deff]' : 'bg-[#e9edff] text-[#4963b0]']">
+                                                <option value="">{{ t('item.noFolder') }}</option>
+                                                <option v-for="f in allFolders" :key="f.id" :value="f.id">{{ f.name }}</option>
+                                            </select>
+                                        </div>
+                                        <div :class="['mt-0.5 text-[10px]', theme === 'dark' ? 'text-[#a7b5d2]' : 'text-[#8492b2]']">
+                                            {{ t('item.updated', { date: formatTimestamp(selectedItem.updated_at) }) }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="hidden xl:flex items-center gap-1.5">
+                                    <button @click="toggleFavorite(selectedItem)" :title="t('nav.favorites')" :aria-label="t('nav.favorites')"
+                                            :class="['grid h-8 w-8 place-items-center rounded-lg border transition', theme === 'dark' ? 'border-[#46577a] bg-[#283757] text-[#f4ca66]' : 'border-[#e2e7f3] bg-white text-[#6478ae]']">
+                                        <i :class="[selectedItem.is_favorite ? 'fa-solid text-[#d99822]' : 'fa-regular', 'fa-star text-xs']"></i>
+                                    </button>
+                                    <button @click="startMergeFromCurrentItem(selectedItem)"
+                                            :class="['h-8 rounded-lg border px-2.5 text-[10.5px] font-semibold transition', theme === 'dark' ? 'border-[#46577a] bg-[#283757] text-[#e0e7ff]' : 'border-[#e2e7f3] bg-white text-[#4c618f]']">
+                                        {{ t('merge.with') }}
+                                    </button>
+                                    <button @click="openItemModal(selectedItem)"
+                                            :class="['h-8 rounded-lg border px-3 text-[10.5px] font-semibold transition', theme === 'dark' ? 'border-[#46577a] bg-[#283757] text-[#e0e7ff]' : 'border-[#e2e7f3] bg-white text-[#4c618f]']">
+                                        {{ t('item.editLong') }}
+                                    </button>
+                                    <button v-if="!selectedItem.is_trashed" @click="moveToTrash(selectedItem)" :title="t('trash.move')" :aria-label="t('trash.move')"
+                                            :class="['grid h-8 w-8 place-items-center rounded-lg border transition hover:text-[#b6544a]', theme === 'dark' ? 'border-[#46577a] bg-[#283757] text-[#b9c5e0]' : 'border-[#e2e7f3] bg-white text-[#7180a0]']">
+                                        <i class="fa-regular fa-trash-can text-xs"></i>
+                                    </button>
+                                    <template v-else>
+                                        <button @click="restoreFromTrash(selectedItem)" class="h-8 rounded-lg bg-[#10b981] px-3 text-[10.5px] font-semibold text-white">
+                                            {{ t('trash.restore') }}
+                                        </button>
+                                        <button @click="deletePermanently(selectedItem.id)" class="h-8 rounded-lg bg-[#e11d48] px-3 text-[10.5px] font-semibold text-white">
+                                            {{ t('trash.deleteForever') }}
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Содержимое карточки -->
+                            <div class="px-4 py-4 sm:px-7 space-y-4">
+
+                                <!-- Вкладки Мульти-карточки (+ режим «Все сразу») -->
+                                <div v-if="isMultiCard" class="space-y-2">
+                                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                                        <div class="flex items-center gap-1.5 overflow-x-auto rounded-xl border p-1 max-w-full" :class="theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#dfe5f3] bg-[#f8faff]'">
+                                            <button @click="subCardsViewAll = true"
+                                                    :class="['px-2.5 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition', subCardsViewAll ? 'bg-[#315bd7] text-white' : 'opacity-75']">
+                                                <i class="fa-solid fa-table-cells-large text-[10px] mr-1"></i>{{ t('multi.all') }}
+                                            </button>
+                                            <button v-for="(sc, sIdx) in selectedItem.decrypted.subCards" :key="sIdx"
+                                                    @click="activeSubCardIdx = sIdx; subCardsViewAll = false"
+                                                    :class="['px-2.5 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition', (!subCardsViewAll && activeSubCardIdx === sIdx) ? 'bg-[#315bd7] text-white' : 'opacity-75']">
+                                                #{{ sIdx + 1 }} {{ formatDomain(sc.url) || decodePunycodeText(sc.title) }}
+                                            </button>
+                                        </div>
+                                        <button @click="unmergeMultiCard(selectedItem)" class="text-[11px] font-semibold text-[#315bd7] dark:text-[#91d2ff] hover:underline">
+                                            {{ t('merge.unmerge') }}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <template v-if="showSingleView">
+
+                                    <!-- Визуальная пластиковая банковская карта -->
+                                    <div v-if="selectedItem.decrypted.itemType === 'card'"
+                                         class="relative mx-auto w-full max-w-[380px] overflow-hidden rounded-2xl p-5 text-white shadow-[0_18px_40px_rgba(20,36,74,0.28)]"
+                                         :style="{ background: 'linear-gradient(135deg, ' + getEntryColorHex(selectedItem.decrypted.title) + ' 0%, #121c36 100%)' }">
+                                        <div class="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10"></div>
+                                        <div class="absolute -right-4 top-16 h-32 w-32 rounded-full bg-white/[0.06]"></div>
+                                        <div class="relative flex items-start justify-between gap-2">
+                                            <div class="min-w-0 truncate pr-2 text-[12px] font-semibold opacity-90">{{ decodePunycodeText(selectedItem.decrypted.title) }}</div>
+                                            <div class="shrink-0 text-[13px] font-extrabold italic tracking-wide">{{ detectCardBrand(activeCardData.username) }}</div>
+                                        </div>
+                                        <div class="relative mt-5 flex items-center gap-3">
+                                            <div class="h-8 w-11 rounded-md bg-gradient-to-br from-[#f4c96b] to-[#c49b4a]"></div>
+                                            <i class="fa-solid fa-wifi rotate-90 text-sm opacity-70"></i>
+                                        </div>
+                                        <div class="relative mt-4 cursor-pointer break-all font-mono text-[17px] font-semibold tracking-[0.12em] sm:text-[19px]" @click="copyText(activeCardData.username, false)" :title="t('card.copyNumber')">
+                                            {{ formatCardNumber(activeCardData.username) }}
+                                        </div>
+                                        <div class="relative mt-4 flex items-end justify-between gap-3">
+                                            <div class="min-w-0">
+                                                <div class="text-[8.5px] uppercase tracking-wider opacity-60">{{ t('card.holder') }}</div>
+                                                <div class="truncate text-[12px] font-semibold uppercase">{{ cardExtra.holder || '—' }}</div>
+                                            </div>
+                                            <div>
+                                                <div class="text-[8.5px] uppercase tracking-wider opacity-60">{{ t('card.expiry') }}</div>
+                                                <div class="font-mono text-[12px] font-semibold">{{ cardExtra.expiry || t('card.expiryPlaceholder') }}</div>
+                                            </div>
+                                            <div class="cursor-pointer" @click="copyText(activeCardData.password, true)" :title="t('card.copyCvv')">
+                                                <div class="text-[8.5px] uppercase tracking-wider opacity-60">CVV</div>
+                                                <div class="font-mono text-[12px] font-semibold">{{ selectedItem.showPwd ? (activeCardData.password || '—') : '•••' }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Быстрые кнопки копирования -->
+                                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                                        <div :class="['text-[10px] font-semibold uppercase tracking-[0.14em]', theme === 'dark' ? 'text-[#aab9dc]' : 'text-[#7182aa]']">{{ t('item.credentials') }}</div>
+                                        <div class="flex gap-2">
+                                            <button v-if="activeCardData.username" @click="copyText(activeCardData.username, false)" class="flex h-8 items-center gap-1.5 rounded-lg border border-[#315bd7]/30 px-3 text-[11px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
+                                                <i class="fa-regular fa-user text-[10px]"></i> {{ t('item.login') }}
+                                            </button>
+                                            <button v-if="activeCardData.password" @click="copyText(activeCardData.password, true)" class="flex h-8 items-center gap-1.5 rounded-lg bg-[#315bd7] px-3 text-[11px] font-semibold text-white shadow-xs">
+                                                <i class="fa-regular fa-copy text-[10px]"></i> {{ t('item.copyPassword') }}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Поля Логин / Пароль / 2FA -->
+                                    <div v-if="selectedItem.decrypted.itemType !== 'note'" :class="['overflow-hidden rounded-xl border', theme === 'dark' ? 'border-[#3a4b70]' : 'border-[#dfe5f3]']">
+                                        <div :class="['px-4 py-3 sm:px-5', theme === 'dark' ? 'border-b border-[#3a4b70] bg-[#202e4b]' : 'border-b border-[#e5eaf6] bg-[#f8faff]']">
+                                            <div class="mb-1 flex items-center justify-between">
+                                                <label :class="['text-[9.5px] font-semibold uppercase tracking-[0.12em]', theme === 'dark' ? 'text-[#aab9dc]' : 'text-[#7586ad]']">
+                                                    {{ selectedItem.decrypted.itemType === 'card' ? t('item.cardNumber') : (selectedItem.decrypted.itemType === 'wifi' ? t('item.wifiSsid') : t('item.loginEmail')) }}
+                                                </label>
+                                                <button @click="copyText(activeCardData.username, false)" class="text-[10.5px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
+                                                    <i class="fa-regular fa-copy"></i> {{ t('common.copy') }}
+                                                </button>
+                                            </div>
+                                            <div class="break-all text-[13.5px] font-medium">{{ activeCardData.username || t('item.notSet') }}</div>
+                                        </div>
+
+                                        <div :class="['px-4 py-3 sm:px-5', theme === 'dark' ? 'bg-[#1b2740]' : 'bg-[#fffefa]']">
+                                            <div class="mb-1 flex items-center justify-between gap-2 flex-wrap">
+                                                <label :class="['text-[9.5px] font-semibold uppercase tracking-[0.12em]', theme === 'dark' ? 'text-[#aab9dc]' : 'text-[#7586ad]']">
+                                                    {{ selectedItem.decrypted.itemType === 'card' ? t('item.cvvPin') : t('item.password') }}
+                                                </label>
+                                                <div class="flex items-center gap-3">
+                                                    <button v-if="selectedItem.decrypted.itemType !== 'card'" @click="checkPwned(activeCardData.password, pwnedKey(activeSubCardIdx))" class="text-[10.5px] font-semibold text-[#315bd7] dark:text-[#91d2ff]" :title="t('pwned.hint')">
+                                                        <i class="fa-solid fa-shield-virus"></i> {{ t('pwned.button') }}
+                                                    </button>
+                                                    <button @click="selectedItem.showPwd = !selectedItem.showPwd" class="text-[10.5px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
+                                                        <i :class="selectedItem.showPwd ? 'fa-regular fa-eye-slash' : 'fa-regular fa-eye'"></i> {{ selectedItem.showPwd ? t('common.hide') : t('common.show') }}
+                                                    </button>
+                                                    <button @click="copyText(activeCardData.password, true)" class="text-[10.5px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
+                                                        <i class="fa-regular fa-copy"></i> {{ t('common.copy') }}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="break-all font-mono text-[13.5px] tracking-wider">
+                                                {{ selectedItem.showPwd ? (activeCardData.password || t('item.empty')) : '••••••••••••••••' }}
+                                            </div>
+                                            <div v-if="pwnedInfo(pwnedKey(activeSubCardIdx))" :class="['mt-1.5 text-[11px] font-semibold', pwnedInfo(pwnedKey(activeSubCardIdx)).cls]">
+                                                {{ pwnedInfo(pwnedKey(activeSubCardIdx)).text }}
+                                            </div>
+                                        </div>
+
+                                        <div v-if="selectedItem.decrypted.totpSecret" @click="copyText(selectedItem.totpCode, false)" :class="['px-4 py-3 sm:px-5 border-t cursor-pointer flex items-center justify-between', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#e5eaf6] bg-[#f8faff]']">
+                                            <div>
+                                                <div class="text-[9.5px] font-semibold uppercase text-[#315bd7] dark:text-[#91d2ff]">{{ t('item.totpCode') }}</div>
+                                                <div class="font-mono text-lg font-bold tracking-widest">{{ formatTotp(selectedItem.totpCode) }}</div>
+                                            </div>
+                                            <span class="rounded-full bg-[#315bd7]/15 px-2.5 py-1 font-mono text-xs font-bold text-[#315bd7] dark:text-[#91d2ff]">{{ t('common.seconds', { n: selectedItem.totpSecondsLeft }) }}</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- QR-код для быстрого подключения к Wi-Fi -->
+                                    <div v-if="selectedItem.decrypted.itemType === 'wifi' && activeCardData.username && activeCardData.password"
+                                         :class="['rounded-xl border p-4 flex items-center gap-4', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#dfe5f3] bg-[#f8faff]']">
+                                        <div class="bg-white p-2 rounded-lg shrink-0" v-html="generateWifiQrSvg(activeCardData.username, activeCardData.password)"></div>
+                                        <div>
+                                            <div class="text-xs font-bold">{{ t('wifi.qrTitle') }}</div>
+                                            <p class="text-[11px] opacity-75 mt-1">{{ t('wifi.qrHint', { ssid: activeCardData.username }) }}</p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Дополнительные поля (Custom Fields) -->
+                                    <div v-if="selectedItem.decrypted.customFields && selectedItem.decrypted.customFields.length > 0"
+                                         :class="['rounded-xl border overflow-hidden', theme === 'dark' ? 'border-[#3a4b70]' : 'border-[#dfe5f3]']">
+                                        <div v-for="(cf, idx) in selectedItem.decrypted.customFields" :key="idx"
+                                             @click="copyText(cf.value, false)"
+                                             :class="['px-4 py-2.5 flex items-center justify-between cursor-pointer border-b last:border-b-0', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#e5eaf6] bg-[#f8faff]']">
+                                            <div>
+                                                <div class="text-[9.5px] font-semibold uppercase opacity-70">{{ cf.label }}</div>
+                                                <div class="text-xs font-semibold">{{ cf.value }}</div>
+                                            </div>
+                                            <i class="fa-regular fa-copy text-xs opacity-60"></i>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="activeCardData.note || selectedItem.decrypted.itemType === 'note'" :class="['rounded-xl border p-4 whitespace-pre-wrap text-[13px] leading-relaxed', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#dfe5f3] bg-[#f8faff]']">
+                                        <div class="mb-1 text-[9.5px] font-semibold uppercase opacity-70">{{ t('item.note') }}</div>
+                                        {{ activeCardData.note || t('item.noteEmpty') }}
+                                    </div>
+
+                                    <!-- Нижние карточки: Сайт + Безопасность -->
+                                    <div class="grid gap-3 sm:grid-cols-2">
+                                        <div :class="['rounded-xl border p-3.5', theme === 'dark' ? 'border-[#475680] bg-[#222f4e]' : 'border-[#dbe4fb] bg-[#f1f5ff]']">
+                                            <div class="mb-1.5 flex items-center gap-2">
+                                                <i class="fa-solid fa-globe text-xs text-[#4f70d5]"></i>
+                                                <span class="text-[9.5px] font-semibold uppercase opacity-75">{{ t('item.site') }}</span>
+                                            </div>
+                                            <div class="flex items-center justify-between gap-2">
+                                                <a v-if="activeCardData.url" :href="getWorkingWebUrl(activeCardData.url, activeCardData.title)" target="_blank" rel="noopener noreferrer"
+                                                   class="truncate text-[12px] font-semibold underline">
+                                                    {{ decodePunycodeText(getWorkingWebUrl(activeCardData.url, activeCardData.title)) }}
+                                                </a>
+                                                <span v-else class="text-xs opacity-60">{{ t('item.noUrl') }}</span>
+                                                <div v-if="activeCardData.url" class="flex gap-1 shrink-0">
+                                                    <a :href="getWorkingWebUrl(activeCardData.url, activeCardData.title)" target="_blank" rel="noopener noreferrer"
+                                                       class="rounded-md bg-[#315bd7] px-2.5 py-1 text-[10px] font-semibold text-white">
+                                                        {{ t('common.open') }}
+                                                    </a>
+                                                    <a v-if="isAndroidAppUrl(activeCardData.url)" :href="getGooglePlayUrl(activeCardData.url)" target="_blank" rel="noopener noreferrer"
+                                                       class="rounded-md border border-[#315bd7] px-2 py-1 text-[10px] font-semibold">
+                                                        Play
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div :class="['rounded-xl border p-3.5', theme === 'dark' ? 'border-[#3e7869] bg-[#203b3b]' : 'border-[#bce6d3] bg-[#ecf9f0]']">
+                                            <div class="mb-1.5 flex items-center gap-2">
+                                                <i class="fa-solid fa-shield-halved text-xs text-[#379776]"></i>
+                                                <span class="text-[9.5px] font-semibold uppercase opacity-75">{{ t('item.protection') }}</span>
+                                            </div>
+                                            <div class="flex items-center justify-between gap-2">
+                                                <span class="text-[12px] font-medium">AES-256-GCM</span>
+                                                <span class="rounded-full bg-[#bce8ce] px-2 py-0.5 text-[9px] font-bold text-[#286748] dark:bg-[#315b4a] dark:text-[#b6efd2]">{{ t('item.protectedBadge') }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- Режим «Все сразу» для Мульти-карточки -->
+                                <div v-else class="space-y-2.5">
+                                    <div v-for="(sc, sIdx) in selectedItem.decrypted.subCards" :key="sIdx"
+                                         :class="['rounded-xl border p-3.5 space-y-2', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#dfe5f3] bg-[#f8faff]']">
+                                        <div class="flex items-center justify-between gap-2">
+                                            <div class="min-w-0 truncate text-xs font-bold">
+                                                #{{ sIdx + 1 }} {{ decodePunycodeText(sc.title) }}
+                                                <span class="font-normal opacity-60">{{ formatDomain(sc.url) }}</span>
+                                            </div>
+                                            <a v-if="sc.url" :href="getWorkingWebUrl(sc.url, sc.title)" target="_blank" rel="noopener noreferrer"
+                                               class="shrink-0 rounded-md bg-[#315bd7] px-2.5 py-1 text-[10px] font-semibold text-white">{{ t('common.open') }}</a>
+                                        </div>
+                                        <div class="flex items-center justify-between gap-2 cursor-pointer" @click="copyText(sc.username, false)">
+                                            <div class="min-w-0">
+                                                <div class="text-[9.5px] font-semibold uppercase opacity-70">{{ t('item.loginEmail') }}</div>
+                                                <div class="break-all text-[12.5px] font-medium">{{ sc.username || t('item.notSet') }}</div>
+                                            </div>
+                                            <i class="fa-regular fa-copy text-xs opacity-60"></i>
+                                        </div>
+                                        <div>
+                                            <div class="flex items-center justify-between gap-2">
+                                                <div class="text-[9.5px] font-semibold uppercase opacity-70">{{ t('item.password') }}</div>
+                                                <div class="flex items-center gap-3">
+                                                    <button @click="checkPwned(sc.password, pwnedKey(sIdx))" class="text-[10.5px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
+                                                        <i class="fa-solid fa-shield-virus"></i> {{ t('pwned.button') }}
+                                                    </button>
+                                                    <button @click="toggleShownPwd(pwnedKey(sIdx))" class="text-[10.5px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
+                                                        <i :class="shownPwds[pwnedKey(sIdx)] ? 'fa-regular fa-eye-slash' : 'fa-regular fa-eye'"></i> {{ shownPwds[pwnedKey(sIdx)] ? t('common.hide') : t('common.show') }}
+                                                    </button>
+                                                    <button @click="copyText(sc.password, true)" class="text-[10.5px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
+                                                        <i class="fa-regular fa-copy"></i> {{ t('common.copy') }}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="break-all font-mono text-[12.5px] tracking-wider">
+                                                {{ shownPwds[pwnedKey(sIdx)] ? (sc.password || t('item.empty')) : '••••••••••••••••' }}
+                                            </div>
+                                            <div v-if="pwnedInfo(pwnedKey(sIdx))" :class="['mt-1 text-[11px] font-semibold', pwnedInfo(pwnedKey(sIdx)).cls]">
+                                                {{ pwnedInfo(pwnedKey(sIdx)).text }}
+                                            </div>
+                                        </div>
+                                        <div v-if="sc.note" class="whitespace-pre-wrap text-[12px] opacity-80">{{ sc.note }}</div>
+                                    </div>
+                                </div>
+
+                                <!-- История паролей (если менялся пароль) -->
+                                <div v-if="selectedItem.decrypted.passwordHistory && selectedItem.decrypted.passwordHistory.length > 0"
+                                     :class="['rounded-xl border p-3.5 text-xs', theme === 'dark' ? 'border-[#324260]' : 'border-[#e7ebf5]']">
+                                    <div class="font-semibold opacity-75 mb-1.5">{{ t('item.history', { n: selectedItem.decrypted.passwordHistory.length }) }}</div>
+                                    <div v-for="(ph, pIdx) in selectedItem.decrypted.passwordHistory" :key="pIdx" class="flex justify-between items-center gap-2 py-1 border-b last:border-b-0 border-black/5 dark:border-white/5 font-mono text-[11px]">
+                                        <span class="min-w-0 break-all">{{ ph.password }}</span>
+                                        <span class="shrink-0 font-sans text-[10px] opacity-60">{{ formatTimestamp(ph.changedAt) }}</span>
+                                        <button @click="copyText(ph.password, true)" class="shrink-0 text-[#315bd7] dark:text-[#91d2ff] text-[10px]">{{ t('common.copy') }}</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section v-else :class="['hidden xl:flex flex-col items-center justify-center rounded-xl border px-8 text-center', theme === 'dark' ? 'border-[#324260] bg-[#1a2741]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                            <div :class="['mb-4 grid h-14 w-14 place-items-center rounded-2xl', theme === 'dark' ? 'bg-[#324877] text-[#f5cf73]' : 'bg-[#e7edff] text-[#315bd7]']">
+                                <i class="fa-solid fa-shield-halved text-xl"></i>
+                            </div>
+                            <h2 class="font-serif text-xl">{{ t('item.pickTitle') }}</h2>
+                            <p class="mt-2 max-w-xs text-[11.5px] leading-relaxed text-[#7787a9] dark:text-[#a4b3d1]">
+                                {{ t('item.pickHint') }}
+                            </p>
+                        </section>
+                    </div>
+
+                    <!-- ПОЛНОЭКРАННЫЕ РАЗДЕЛЫ (ДУБЛИКАТЫ, 2FA, ИНСТРУМЕНТЫ И ЛОГИ) -->
+                    <div v-else class="mobile-content-pad flex-1 overflow-y-auto px-3.5 pb-8 sm:px-8">
+
+                        <div v-if="rightPaneMode === 'duplicates'" class="space-y-4 max-w-5xl">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div class="flex gap-2">
+                                    <button @click="dupGroupByMode = 'domain'" :class="['rounded-lg px-3 py-1.5 text-xs font-semibold transition', dupGroupByMode === 'domain' ? 'bg-[#315bd7] text-white' : 'bg-white dark:bg-[#1a2741] border border-[#dce3f4] dark:border-[#324260]']">
+                                        {{ t('dup.byDomain') }}
+                                    </button>
+                                    <button @click="dupGroupByMode = 'strict'" :class="['rounded-lg px-3 py-1.5 text-xs font-semibold transition', dupGroupByMode === 'strict' ? 'bg-[#315bd7] text-white' : 'bg-white dark:bg-[#1a2741] border border-[#dce3f4] dark:border-[#324260]']">
+                                        {{ t('dup.byDomainLogin') }}
+                                    </button>
+                                </div>
+                                <button v-if="ignoredDupKeys.length > 0" @click="resetIgnoredDuplicates" class="text-xs text-[#315bd7] dark:text-[#91d2ff] underline">
+                                    {{ t('dup.restoreHidden', { n: ignoredDupKeys.length }) }}
+                                </button>
+                            </div>
+
+                            <div v-if="duplicateGroups.length === 0" :class="['rounded-xl border p-10 text-center', theme === 'dark' ? 'border-[#324260] bg-[#1a2741]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                                <i class="fa-solid fa-circle-check text-2xl text-[#329371] mb-2"></i>
+                                <div class="font-semibold text-sm">{{ t('dup.none') }}</div>
+                            </div>
+
+                            <div v-for="grp in duplicateGroups" :key="grp.key" :class="['rounded-xl border p-4 sm:p-5 shadow-xs', theme === 'dark' ? 'border-[#324260] bg-[#1a2741]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                                <div class="flex flex-wrap items-center justify-between gap-3 border-b pb-3" :class="theme === 'dark' ? 'border-[#324260]' : 'border-[#e7ebf5]'">
+                                    <div class="flex items-center gap-3">
+                                        <div class="grid h-9 w-9 place-items-center rounded-xl text-white font-bold text-sm" :style="{ backgroundColor: getEntryColorHex(grp.title) }">
+                                            {{ getInitials(decodePunycodeText(grp.title)) }}
+                                        </div>
+                                        <div>
+                                            <div class="font-bold text-sm">{{ decodePunycodeText(grp.title) }}</div>
+                                            <div class="text-[11px] opacity-70">{{ t('dup.count', { n: grp.items.length }) }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <button @click="ignoreDuplicateGroup(grp.key)" class="rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] px-2.5 py-1.5 text-[11px] font-semibold">
+                                            {{ t('common.hide') }}
+                                        </button>
+                                        <button @click="combineIntoMultiCard(grp)" class="rounded-lg bg-[#315bd7] px-3 py-1.5 text-[11px] font-semibold text-white">
+                                            {{ t('merge.toMulti') }} ({{ grp.items.filter(i => i.mergeSelected !== false).length }})
+                                        </button>
+                                        <button @click="mergeSingleGroup(grp)" class="rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] px-2.5 py-1.5 text-[11px] font-semibold">
+                                            {{ t('merge.toOne') }}
+                                        </button>
+                                        <button @click="deleteSelectedInGroup(grp)" class="rounded-lg border border-[#e11d48]/40 bg-[#e11d48]/10 px-2.5 py-1.5 text-[11px] font-semibold text-[#e11d48]">
+                                            {{ t('common.delete') }} ({{ grp.items.filter(i => i.mergeSelected !== false).length }})
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 mt-3">
+                                    <div v-for="dup in grp.items" :key="dup.id" :class="['rounded-xl border p-3 space-y-1.5', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#dfe5f3] bg-[#f8faff]']">
+                                        <div class="flex items-center justify-between text-xs font-bold border-b pb-1.5" :class="theme === 'dark' ? 'border-[#3a4b70]' : 'border-[#e5eaf6]'">
+                                            <label class="flex items-center gap-2 cursor-pointer">
+                                                <input type="checkbox" v-model="dup.mergeSelected" class="accent-[#315bd7]" />
+                                                <span>ID #{{ dup.id }}</span>
+                                            </label>
+                                            <label class="flex items-center gap-1 cursor-pointer text-[#315bd7] dark:text-[#91d2ff]">
+                                                <input type="radio" :name="'p_' + grp.key" :checked="(grp.primaryId || grp.items[0].id) === dup.id" @change="grp.primaryId = dup.id" />
+                                                <span>{{ t('dup.primary') }}</span>
+                                            </label>
+                                        </div>
+                                        <div class="text-xs font-semibold truncate">{{ decodePunycodeText(dup.decrypted.title) }}</div>
+                                        <div class="text-[11px] font-mono truncate opacity-80">{{ dup.decrypted.username || '—' }}</div>
+                                        <div class="flex items-center justify-between gap-2 text-[11px] font-mono">
+                                            <span class="truncate">{{ dup.showPwd ? dup.decrypted.password : '••••••••••' }}</span>
+                                            <button @click="dup.showPwd = !dup.showPwd" class="text-[10px] underline text-[#315bd7] dark:text-[#91d2ff]">{{ dup.showPwd ? t('common.hide') : t('common.show') }}</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-else-if="rightPaneMode === 'totp_hub'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-5xl">
+                            <div v-if="itemsWithTotp.length === 0" :class="['col-span-full rounded-xl border p-8 text-center text-xs opacity-75', theme === 'dark' ? 'border-[#324260] bg-[#1a2741]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                                {{ t('totp.none') }}
+                            </div>
+                            <div v-for="tItem in itemsWithTotp" :key="tItem.id" @click="copyText(tItem.totpCode, false)"
+                                 :class="['rounded-xl border p-4 cursor-pointer flex items-center justify-between', theme === 'dark' ? 'border-[#324260] bg-[#1a2741]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                                <div>
+                                    <div class="text-xs font-bold">{{ decodePunycodeText(tItem.decrypted.title) }}</div>
+                                    <div class="font-mono text-xl font-bold text-[#315bd7] dark:text-[#91d2ff] tracking-widest mt-1">{{ formatTotp(tItem.totpCode) }}</div>
+                                </div>
+                                <span class="font-mono text-xs font-bold opacity-75">{{ t('common.seconds', { n: tItem.totpSecondsLeft }) }}</span>
+                            </div>
+                        </div>
+
+                        <!-- РАЗДЕЛ ПАПОК, НАСТРОЕК И СЕРВЕРНЫХ ЛОГОВ -->
+                        <div v-else class="space-y-4 max-w-4xl">
+                            <div :class="['rounded-xl border p-4 sm:p-5', theme === 'dark' ? 'border-[#324260] bg-[#1a2741]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h3 class="font-serif text-lg">{{ t('nav.folders') }}</h3>
+                                    <button @click="autoSortItemsIntoFolders(true)" class="text-xs font-semibold text-[#315bd7] dark:text-[#91d2ff]">
+                                        {{ t('settings.autoSort') }}
+                                    </button>
+                                </div>
+                                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                                    <button v-for="fld in allFolders" :key="fld.id" @click="setFilter('all', 'all', fld.id)"
+                                            :class="['flex items-center gap-2.5 rounded-xl border p-3 text-left transition', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#dfe5f3] bg-[#f8faff]']">
+                                        <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-lg', fld.tintClass]">
+                                            <i :class="[fld.icon, 'text-xs']"></i>
+                                        </span>
+                                        <div class="min-w-0">
+                                            <div class="text-xs font-bold truncate">{{ fld.name }}</div>
+                                            <div class="text-[10px] opacity-70">{{ tp('folder.items', countByFolder(fld.id), { n: countByFolder(fld.id) }) }}</div>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div :class="['rounded-xl border p-4 sm:p-5 space-y-3', theme === 'dark' ? 'border-[#324260] bg-[#1a2741]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                                    <h3 class="font-serif text-lg">{{ t('settings.tools') }}</h3>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button @click="openPasswordGenerator" class="rounded-lg bg-[#315bd7] px-3 py-2 text-xs font-semibold text-white">
+                                            {{ t('settings.generator') }}
+                                        </button>
+                                        <button @click="showExtensionModal = true" class="rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] px-3 py-2 text-xs font-semibold">
+                                            {{ t('settings.extension') }}
+                                        </button>
+                                        <button @click="triggerPwaInstall" class="rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] px-3 py-2 text-xs font-semibold">
+                                            {{ t('settings.installPwa') }}
+                                        </button>
+                                        <button @click="openImportModal" class="rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] px-3 py-2 text-xs font-semibold">
+                                            {{ t('settings.import') }}
+                                        </button>
+                                        <button @click="exportVaultJSON" class="rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] px-3 py-2 text-xs font-semibold">
+                                            {{ t('settings.backup') }}
+                                        </button>
+                                        <button @click="openSecuritySettingsModal" class="rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] px-3 py-2 text-xs font-semibold">
+                                            {{ t('settings.changePassword') }}
+                                        </button>
+                                        <button v-if="isAdmin" @click="openAdminModal" class="rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] px-3 py-2 text-xs font-semibold">
+                                            {{ t('settings.family') }}
+                                        </button>
+                                        <button @click="openLogsModal" class="rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] px-3 py-2 text-xs font-semibold">
+                                            {{ t('settings.logs') }}
+                                        </button>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-2 pt-2 border-t border-black/5 dark:border-white/5">
+                                        <span class="text-xs font-semibold">{{ t('settings.language') }}</span>
+                                        <div class="flex items-center gap-1" role="group" :aria-label="t('lang.label')">
+                        <button v-for="l in ['ru', 'en']" :key="l" @click="setLang(l)" :aria-pressed="lang === l" :title="t('lang.name.' + l)"
+                                :class="['h-9 w-9 rounded-lg border text-[11px] font-semibold uppercase transition', lang === l ? 'border-[#315bd7] bg-[#315bd7] text-white' : (theme === 'dark' ? 'border-[#3b4c6f] bg-[#202d49] text-[#91d2ff]' : 'border-[#d8e0f3] bg-white text-[#536ca7]')]">{{ l }}</button>
+                    </div>
+                                    </div>
+                                </div>
+
+                                <!-- Дозор безопасности с круговой диаграммой -->
+                                <div :class="['rounded-xl border p-4 sm:p-5 space-y-3', theme === 'dark' ? 'border-[#324260] bg-[#1a2741]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                                    <h3 class="font-serif text-lg">{{ t('nav.watchtower') }}</h3>
+                                    <div class="flex items-center gap-4">
+                                        <svg viewBox="0 0 140 140" class="h-32 w-32 shrink-0">
+                                            <g transform="rotate(-90 70 70)">
+                                                <circle cx="70" cy="70" r="52" fill="none" stroke-width="14" :stroke="theme === 'dark' ? '#2a3b5e' : '#e3e9f8'" />
+                                                <template v-for="seg in securityBreakdown.segs" :key="seg.label">
+                                                    <circle v-if="seg.value > 0" cx="70" cy="70" r="52" fill="none" stroke-width="14"
+                                                            :stroke="seg.color" :stroke-dasharray="seg.dash" :stroke-dashoffset="seg.offset" />
+                                                </template>
+                                            </g>
+                                            <text x="70" y="68" text-anchor="middle" font-size="24" font-weight="700" fill="currentColor">{{ securityScore }}%</text>
+                                            <text x="70" y="86" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.65">{{ t('settings.protected') }}</text>
+                                        </svg>
+                                        <div class="min-w-0 flex-1 space-y-1.5 text-xs">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-[#10b981]"></span>{{ t('settings.strong') }}</span>
+                                                <b>{{ securityBreakdown.segs[0].value }}</b>
+                                            </div>
+                                            <div class="flex items-center justify-between gap-2 cursor-pointer" @click="setFilter('all', 'reused', 'all')">
+                                                <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-[#f59e0b]"></span>{{ t('settings.reused') }}</span>
+                                                <b class="text-[#f59e0b]">{{ reusedCount }}</b>
+                                            </div>
+                                            <div class="flex items-center justify-between gap-2 cursor-pointer" @click="setFilter('all', 'weak', 'all')">
+                                                <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-[#e11d48]"></span>{{ t('settings.weak') }}</span>
+                                                <b class="text-[#e11d48]">{{ weakCount }}</b>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="flex justify-between text-xs pt-2 border-t border-black/5 dark:border-white/5 cursor-pointer" @click="openDuplicatesView">
+                                        <span>{{ t('settings.dupGroups') }}</span> <b>{{ duplicateGroups.length }}</b>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ ДЛЯ ТЕЛЕФОНА -->
+                    <nav :class="['safe-bottom-nav lg:hidden fixed bottom-0 inset-x-0 z-50 grid grid-cols-5 border-t backdrop-blur-md', theme === 'dark' ? 'border-[#283653] bg-[#18243d]/95 text-[#91a2ca]' : 'border-[#dbe2f6] bg-[#fbfcff]/95 text-[#63769e]']">
+                        <button @click="setFilter('all', 'all', 'all')"
+                                :class="['flex flex-col items-center justify-center gap-1 text-[10px] font-semibold', (rightPaneMode === 'item' && !mobileNavOpen) ? 'text-[#315bd7] dark:text-[#91d2ff]' : '']">
+                            <i class="fa-solid fa-key text-sm"></i>
+                            <span>{{ t('bottom.items') }}</span>
+                        </button>
+                        <button @click="openHomeOverview()"
+                                :class="['flex flex-col items-center justify-center gap-1 text-[10px] font-semibold', rightPaneMode === 'home' ? 'text-[#315bd7] dark:text-[#91d2ff]' : '']">
+                            <i class="fa-solid fa-folder-open text-sm"></i>
+                            <span>{{ t('bottom.folders') }}</span>
+                        </button>
+                        <button @click="openItemModal(null)" class="flex flex-col items-center justify-center gap-1 text-[10px] font-bold text-[#315bd7] dark:text-[#f4c96b]">
+                            <i class="fa-solid fa-circle-plus text-lg"></i>
+                            <span>{{ t('bottom.add') }}</span>
+                        </button>
+                        <button @click="openDuplicatesView()"
+                                :class="['flex flex-col items-center justify-center gap-1 text-[10px] font-semibold', rightPaneMode === 'duplicates' ? 'text-[#315bd7] dark:text-[#91d2ff]' : '']">
+                            <i class="fa-solid fa-clone text-sm"></i>
+                            <span>{{ t('bottom.duplicates') }}</span>
+                        </button>
+                        <button @click="mobileNavOpen = !mobileNavOpen"
+                                :class="['flex flex-col items-center justify-center gap-1 text-[10px] font-semibold', mobileNavOpen ? 'text-[#315bd7] dark:text-[#91d2ff]' : '']">
+                            <i class="fa-solid fa-bars text-sm"></i>
+                            <span>{{ t('header.menu') }}</span>
+                        </button>
+                    </nav>
+
+                </main>
+            </div>
+
+            <!-- МОДАЛЬНОЕ ОКНО СОЗДАНИЯ / РЕДАКТИРОВАНИЯ ЗАПИСИ С КАСТОМНЫМИ ПОЛЯМИ -->
+            <div v-if="showItemModal" class="fixed inset-0 z-[90] flex items-center justify-center bg-[#17221d]/55 p-3.5 backdrop-blur-[3px]" @mousedown.self="showItemModal = false">
+                <div :class="['w-full max-w-[480px] max-h-[88dvh] overflow-y-auto rounded-2xl border p-5 sm:p-6 shadow-2xl', theme === 'dark' ? 'border-[#3c4e73] bg-[#202d49] text-[#edf1ff]' : 'border-[#dce3f4] bg-[#fffefa] text-[#263756]']">
+                    <div class="mb-4 flex items-start justify-between">
+                        <div>
+                            <h3 class="font-serif text-[20px] sm:text-[22px]">{{ editingItem ? t('item.editTitle') : t('item.new') }}</h3>
+                            <p :class="['mt-0.5 text-[10.5px]', theme === 'dark' ? 'text-[#aab8d5]' : 'text-[#7281a4]']">{{ t('item.encryptedLocally') }}</p>
+                        </div>
+                        <button @click="showItemModal = false" :aria-label="t('common.close')" class="grid h-8 w-8 place-items-center rounded-lg opacity-70 hover:opacity-100">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 mb-3">
+                        <label class="block text-[10px] font-semibold">{{ t('item.type') }}
+                            <select v-model="itemForm.itemType" :class="['mt-1 h-9 w-full rounded-lg border px-2 text-[11px] outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']">
+                                <option value="login">{{ t('item.type.login') }}</option>
+                                <option value="card">{{ t('item.type.card') }}</option>
+                                <option value="wifi">{{ t('item.type.wifi') }}</option>
+                                <option value="note">{{ t('item.type.note') }}</option>
+                            </select>
+                        </label>
+                        <label class="block text-[10px] font-semibold">{{ t('item.folder') }}
+                            <select v-model="itemForm.folder" :class="['mt-1 h-9 w-full rounded-lg border px-2 text-[11px] outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']">
+                                <option value="">{{ t('item.autoNoFolder') }}</option>
+                                <option v-for="f in allFolders" :key="f.id" :value="f.id">{{ f.name }}</option>
+                            </select>
+                        </label>
+                        <label class="block text-[10px] font-semibold">{{ t('item.scope') }}
+                            <select v-model="itemForm.scope" :class="['mt-1 h-9 w-full rounded-lg border px-2 text-[11px] outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']">
+                                <option value="personal">{{ t('nav.personal') }}</option>
+                                <option value="family">{{ t('nav.family') }}</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <label class="mb-3 block text-[10.5px] font-semibold">{{ t('item.titleLabel') }}
+                        <input v-model="itemForm.title" :placeholder="t('item.titlePlaceholder')" :class="['mt-1 h-10 w-full rounded-lg border px-3 text-[12px] font-normal outline-none focus:border-[#6d8df0]', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                    </label>
+
+                    <p v-if="itemForm.itemType === 'card'" class="mb-3 text-[10.5px] opacity-70">{{ t('item.cardHint') }}</p>
+
+                    <label v-if="itemForm.itemType !== 'note'" class="mb-3 block text-[10.5px] font-semibold">{{ t('item.usernameLabel') }}
+                        <input v-model="itemForm.username" placeholder="name@example.ru" :class="['mt-1 h-10 w-full rounded-lg border px-3 text-[12px] font-normal outline-none focus:border-[#6d8df0]', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                    </label>
+
+                    <label v-if="itemForm.itemType !== 'note'" class="mb-3 block text-[10.5px] font-semibold">{{ t('item.passwordLabel') }}
+                        <div class="flex gap-1.5 mt-1">
+                            <input :type="showModalPwd ? 'text' : 'password'" v-model="itemForm.password" :placeholder="t('item.passwordPlaceholder')" :class="['h-10 flex-1 rounded-lg border px-3 font-mono text-[12px] font-normal outline-none focus:border-[#6d8df0]', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                            <button type="button" @click="showModalPwd = !showModalPwd" :aria-label="t(showModalPwd ? 'common.hidePassword' : 'common.showPassword')" class="h-10 w-10 rounded-lg border border-[#d8e0f3] dark:border-[#3b4d70]"><i :class="showModalPwd ? 'fa-regular fa-eye-slash' : 'fa-regular fa-eye'"></i></button>
+                            <button type="button" @click="generatePasswordIntoForm" :title="t('gen.generate')" :aria-label="t('gen.generate')" class="h-10 w-10 rounded-lg border border-[#d8e0f3] dark:border-[#3b4d70]"><i class="fa-solid fa-dice"></i></button>
+                        </div>
+                    </label>
+
+                    <label v-if="itemForm.itemType === 'login'" class="mb-3 block text-[10.5px] font-semibold">{{ t('item.urlLabel') }}
+                        <input v-model="itemForm.url" placeholder="https://example.ru" :class="['mt-1 h-10 w-full rounded-lg border px-3 text-[12px] font-normal outline-none focus:border-[#6d8df0]', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                    </label>
+
+                    <label v-if="itemForm.itemType === 'login'" class="mb-3 block text-[10.5px] font-semibold">{{ t('item.totpLabel') }}
+                        <input v-model="itemForm.totpSecret" placeholder="JBSWY3DPEHPK3PXP" :class="['mt-1 h-9 w-full rounded-lg border px-3 font-mono text-[11px] font-normal outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']" />
+                    </label>
+
+                    <label class="mb-3 block text-[10.5px] font-semibold">{{ t('item.note') }}
+                        <textarea v-model="itemForm.note" rows="3" :class="['mt-1 w-full rounded-lg border p-2.5 text-[12px] font-normal outline-none', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d] text-white' : 'border-[#d8e0f3] bg-white text-[#263756]']"></textarea>
+                    </label>
+
+                    <!-- Дополнительные поля -->
+                    <div class="mb-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10.5px] font-semibold">{{ t('item.customFields') }}</span>
+                            <button type="button" @click="itemForm.customFields.push({ label: '', value: '' })" class="text-[11px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">{{ t('item.addField') }}</button>
+                        </div>
+                        <div v-for="(cf, idx) in itemForm.customFields" :key="idx" class="flex gap-1.5">
+                            <input v-model="cf.label" :placeholder="t('item.fieldNamePlaceholder')" :class="['h-8 w-1/3 rounded-lg border px-2 text-xs', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d]' : 'border-[#d8e0f3] bg-white']" />
+                            <input v-model="cf.value" :placeholder="t('item.fieldValuePlaceholder')" :class="['h-8 flex-1 rounded-lg border px-2 text-xs', theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d]' : 'border-[#d8e0f3] bg-white']" />
+                            <button type="button" @click="itemForm.customFields.splice(idx, 1)" :aria-label="t('item.removeField')" class="h-8 w-8 rounded-lg border text-[#e11d48]"><i class="fa-solid fa-xmark text-xs"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-3">
+                        <button @click="showItemModal = false" class="h-9 rounded-lg border px-4 text-[11px] font-semibold">{{ t('common.cancel') }}</button>
+                        <button @click="saveItem" class="h-9 rounded-lg bg-[#315bd7] px-5 text-[11px] font-semibold text-white">
+                            {{ t('common.save') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ГЕНЕРАТОР ПАРОЛЕЙ: переключатели наборов символов и оценка стойкости -->
+            <div v-if="showGenModal" class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" @mousedown.self="showGenModal = false">
+                <div :class="['w-full max-w-md rounded-2xl border p-6', theme === 'dark' ? 'border-[#3c4e73] bg-[#202d49]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                    <div class="mb-3 flex items-center justify-between">
+                        <h3 class="font-serif text-xl">{{ t('settings.generator') }}</h3>
+                        <button @click="showGenModal = false" :aria-label="t('common.close')" class="opacity-70 hover:opacity-100"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div class="rounded-xl border p-3.5 font-mono text-center text-sm font-bold break-all mb-3 select-text" :class="theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d]' : 'border-[#d8e0f3] bg-[#f8faff]'">{{ generatedPasswordString }}</div>
+
+                    <div class="mb-3">
+                        <div class="mb-1 flex items-center justify-between text-[11px] font-semibold">
+                            <span>{{ t('gen.strength') }} <span :style="{ color: genStrength.color }">{{ genStrength.label }}</span></span>
+                            <span class="font-mono opacity-70">{{ t('gen.bits', { n: genStrength.bits }) }}</span>
+                        </div>
+                        <div class="h-1.5 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+                            <div class="h-full rounded-full transition-all" :style="{ width: genStrength.percent + '%', backgroundColor: genStrength.color }"></div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3 grid grid-cols-4 gap-1.5">
+                        <button v-for="opt in genOptionList" :key="opt.key" @click="toggleGenOpt(opt.key)"
+                                :class="['h-9 rounded-lg border font-mono text-[11px] font-semibold transition', genOpts[opt.key] ? 'border-[#315bd7] bg-[#315bd7] text-white' : 'border-[#d8e0f3] dark:border-[#3b4c6f]']">
+                            {{ opt.label }}
+                        </button>
+                    </div>
+
+                    <div class="mb-1 flex items-center justify-between text-[11px] font-semibold">
+                        <span>{{ t('gen.length') }}</span><span class="font-mono">{{ genLength }}</span>
+                    </div>
+                    <input type="range" min="8" max="64" v-model.number="genLength" @input="generatePasswordPreview" class="w-full mb-4 accent-[#315bd7]" />
+                    <div class="flex gap-2">
+                        <button @click="generatePasswordPreview" class="flex-1 h-9 rounded-lg border text-xs font-semibold"><i class="fa-solid fa-rotate mr-1 text-[10px]"></i>{{ t('gen.refresh') }}</button>
+                        <button @click="copyText(generatedPasswordString, true); showGenModal = false" class="flex-1 h-9 rounded-lg bg-[#315bd7] text-xs font-semibold text-white">{{ t('common.copy') }}</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- РАСШИРЕНИЕ БРАУЗЕРА: пошаговая инструкция -->
+            <div v-if="showExtensionModal" class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" @mousedown.self="showExtensionModal = false">
+                <div :class="['w-full max-w-lg max-h-[88dvh] overflow-y-auto rounded-2xl border p-6 space-y-3', theme === 'dark' ? 'border-[#3c4e73] bg-[#202d49]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-serif text-xl">{{ t('extension.title') }}</h3>
+                        <button @click="showExtensionModal = false" :aria-label="t('common.close')" class="opacity-70 hover:opacity-100"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <p class="text-xs opacity-80">{{ t('extension.intro', { origin: currentOrigin }) }}</p>
+
+                    <ol class="space-y-3 text-xs">
+                        <li class="flex gap-2.5">
+                            <span class="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#315bd7] text-[10px] font-bold text-white">1</span>
+                            <div class="min-w-0 flex-1"><span v-html="t('extension.step1Html')"></span>
+                                <button @click="downloadBrowserExtensionZip" class="mt-1.5 block h-9 w-full rounded-lg bg-[#315bd7] text-xs font-semibold text-white">{{ t('extension.download') }}</button>
+                            </div>
+                        </li>
+                        <li class="flex gap-2.5">
+                            <span class="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#315bd7] text-[10px] font-bold text-white">2</span>
+                            <div class="min-w-0 flex-1">{{ t('extension.step2') }}
+                                <div class="mt-1.5 flex items-center gap-2">
+                                    <code class="flex-1 truncate rounded-lg border px-2.5 py-2 font-mono text-[11px] select-text" :class="theme === 'dark' ? 'border-[#3b4d70] bg-[#18243d]' : 'border-[#d8e0f3] bg-[#f8faff]'">chrome://extensions/</code>
+                                    <button @click="copyText('chrome://extensions/', false)" class="h-9 shrink-0 rounded-lg border border-[#315bd7]/40 px-3 text-[11px] font-semibold text-[#315bd7] dark:text-[#91d2ff]"><i class="fa-regular fa-copy"></i> {{ t('common.copy') }}</button>
+                                </div>
+                                <div class="mt-1 text-[10.5px] opacity-65">{{ t('extension.otherBrowsers') }}</div>
+                            </div>
+                        </li>
+                        <li class="flex gap-2.5">
+                            <span class="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#315bd7] text-[10px] font-bold text-white">3</span>
+                            <div class="min-w-0 flex-1" v-html="t('extension.step3Html')"></div>
+                        </li>
+                        <li class="flex gap-2.5">
+                            <span class="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#315bd7] text-[10px] font-bold text-white">4</span>
+                            <div class="min-w-0 flex-1" v-html="t('extension.step4Html')"></div>
+                        </li>
+                        <li class="flex gap-2.5">
+                            <span class="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#315bd7] text-[10px] font-bold text-white">5</span>
+                            <div class="min-w-0 flex-1" v-html="t('extension.step5Html')"></div>
+                        </li>
+                    </ol>
+                    <p class="text-[10.5px] opacity-65">{{ t('extension.note') }}</p>
+                </div>
+            </div>
+
+            <!-- УСТАНОВКА PWA: инструкции для iPhone, Android и ПК -->
+            <div v-if="showPwaModal" class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" @mousedown.self="showPwaModal = false">
+                <div :class="['w-full max-w-lg max-h-[88dvh] overflow-y-auto rounded-2xl border p-6 space-y-3', theme === 'dark' ? 'border-[#3c4e73] bg-[#202d49]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-serif text-xl">{{ t('pwa.title') }}</h3>
+                        <button @click="showPwaModal = false" :aria-label="t('common.close')" class="opacity-70 hover:opacity-100"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <p class="text-xs opacity-80">{{ t('pwa.intro') }}</p>
+
+                    <button v-if="canInstallPwa" @click="installPwaNow" class="h-10 w-full rounded-lg bg-[#315bd7] text-xs font-semibold text-white">
+                        <i class="fa-solid fa-download mr-1"></i> {{ t('pwa.installNow') }}
+                    </button>
+
+                    <div :class="['rounded-xl border p-3.5', theme === 'dark' ? 'border-[#3a4b70] bg-[#18243d]' : 'border-[#dfe5f3] bg-[#f8faff]']">
+                        <div class="mb-1.5 flex items-center gap-2 text-xs font-bold"><i class="fa-brands fa-apple"></i> {{ t('pwa.ios.title') }}</div>
+                        <ol class="list-decimal space-y-1 pl-5 text-[11.5px]">
+                            <li v-html="t('pwa.ios.step1Html')"></li>
+                            <li>{{ t('pwa.ios.step2') }}</li>
+                            <li v-html="t('pwa.ios.step3Html')"></li>
+                        </ol>
+                    </div>
+
+                    <div :class="['rounded-xl border p-3.5', theme === 'dark' ? 'border-[#3a4b70] bg-[#18243d]' : 'border-[#dfe5f3] bg-[#f8faff]']">
+                        <div class="mb-1.5 flex items-center gap-2 text-xs font-bold"><i class="fa-brands fa-android"></i> Android (Chrome)</div>
+                        <ol class="list-decimal space-y-1 pl-5 text-[11.5px]">
+                            <li v-html="t('pwa.android.step1Html')"></li>
+                            <li v-html="t('pwa.android.step2Html')"></li>
+                            <li>{{ t('pwa.android.step3') }}</li>
+                        </ol>
+                    </div>
+
+                    <div :class="['rounded-xl border p-3.5', theme === 'dark' ? 'border-[#3a4b70] bg-[#18243d]' : 'border-[#dfe5f3] bg-[#f8faff]']">
+                        <div class="mb-1.5 flex items-center gap-2 text-xs font-bold"><i class="fa-solid fa-desktop"></i> {{ t('pwa.desktop.title') }}</div>
+                        <ol class="list-decimal space-y-1 pl-5 text-[11.5px]">
+                            <li>{{ t('pwa.desktop.step1') }}</li>
+                            <li v-html="t('pwa.desktop.step2Html')"></li>
+                        </ol>
+                    </div>
+
+                    <p class="text-[10.5px] opacity-65">{{ t('pwa.httpsNote') }} <span class="font-mono">{{ currentOrigin }}</span></p>
+                </div>
+            </div>
+
+            <!-- ИМПОРТ CSV / JSON -->
+            <div v-if="showImportModal" class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" @mousedown.self="showImportModal = false">
+                <div :class="['w-full max-w-md rounded-2xl border p-6 space-y-3', theme === 'dark' ? 'border-[#3c4e73] bg-[#202d49]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-serif text-xl">{{ t('import.title') }}</h3>
+                        <button @click="showImportModal = false" :aria-label="t('common.close')" class="opacity-70 hover:opacity-100"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-1.5">
+                        <button @click="importTab = 'csv'" :class="['h-8 rounded-lg border text-xs font-semibold transition', importTab === 'csv' ? 'border-[#315bd7] bg-[#315bd7] text-white' : 'border-[#d8e0f3] dark:border-[#3b4c6f]']">CSV</button>
+                        <button @click="importTab = 'json'" :class="['h-8 rounded-lg border text-xs font-semibold transition', importTab === 'json' ? 'border-[#315bd7] bg-[#315bd7] text-white' : 'border-[#d8e0f3] dark:border-[#3b4c6f]']">JSON</button>
+                    </div>
+                    <div v-if="importTab === 'json'" class="space-y-3">
+                        <p class="text-[11.5px] opacity-75">{{ t('import.json.intro') }}</p>
+                        <input type="file" accept=".json,application/json" @change="handleJsonFileSelect" class="text-xs w-full" />
+                        <div v-if="jsonError" class="rounded-lg border border-[#e11d48]/40 bg-[#e11d48]/10 p-2 text-xs text-[#e11d48]">{{ jsonError }}</div>
+                        <div v-if="jsonPreview" class="rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] p-2 text-xs space-y-0.5">
+                            <div class="font-semibold text-[#329371]">{{ t('import.preview.total', { n: jsonPreview.stats.total }) }}<span v-if="jsonPreview.skipped" class="opacity-70 font-normal"> ({{ t('import.preview.skipped', { n: jsonPreview.skipped }) }})</span></div>
+                            <div>{{ t('import.preview.scopes', { personal: jsonPreview.stats.personal, family: jsonPreview.stats.family }) }}</div>
+                            <div>{{ t('import.preview.types', { login: jsonPreview.stats.login, card: jsonPreview.stats.card, wifi: jsonPreview.stats.wifi, note: jsonPreview.stats.note }) }}</div>
+                            <div>{{ t('import.preview.multi', { n: jsonPreview.stats.multi }) }}<span v-if="jsonPreview.customFolders.length"> · {{ t('import.preview.folders', { n: jsonPreview.customFolders.length }) }}</span></div>
+                        </div>
+                        <label v-if="jsonFamilyMissing" class="flex items-start gap-2 rounded-lg border border-[#d97706]/50 p-2 text-[11px] text-[#d97706]">
+                            <input type="checkbox" v-model="jsonForcePersonal" class="mt-0.5 h-4 w-4" />
+                            <span>{{ tp('import.json.noFamilyKey', jsonPreview.stats.family) }}</span>
+                        </label>
+                        <div v-if="jsonResult" class="rounded-lg border border-[#329371]/40 bg-[#329371]/10 p-2 text-xs text-[#329371]">{{ jsonResult }}</div>
+                        <p class="text-[10.5px] text-[#d97706]">{{ t('import.json.warning') }}</p>
+                        <button :disabled="!jsonPreview || !jsonPreview.items.length || jsonBusy || (jsonFamilyMissing && !jsonForcePersonal)" @click="executeJsonImport" class="w-full h-9 rounded-lg bg-[#315bd7] text-xs font-semibold text-white disabled:opacity-40">{{ jsonBusy ? t('import.busy') : t('import.run') }}</button>
+                    </div>
+                    <div v-if="importTab === 'csv'" class="space-y-3">
+                    <p class="text-[11.5px] opacity-75">{{ t('import.csv.intro') }}</p>
+                    <input type="file" accept=".csv" @change="handleCsvFileSelect" class="text-xs w-full" />
+                    <div>
+                        <div class="mb-1 text-[10.5px] font-semibold">{{ t('import.csv.target') }}</div>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <button @click="importTargetScope = 'personal'" :class="['h-9 rounded-lg border text-xs font-semibold transition', importTargetScope === 'personal' ? 'border-[#315bd7] bg-[#315bd7] text-white' : 'border-[#d8e0f3] dark:border-[#3b4c6f]']">
+                                <i class="fa-solid fa-lock mr-1 text-[10px]"></i> {{ t('nav.personal') }}
+                            </button>
+                            <button @click="importTargetScope = 'family'" :class="['h-9 rounded-lg border text-xs font-semibold transition', importTargetScope === 'family' ? 'border-[#315bd7] bg-[#315bd7] text-white' : 'border-[#d8e0f3] dark:border-[#3b4c6f]']">
+                                <i class="fa-solid fa-users mr-1 text-[10px]"></i> {{ t('nav.family') }}
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="parsedCsvItems.length" class="text-xs font-semibold text-[#329371]">{{ t('import.csv.found', { n: parsedCsvItems.length }) }}</div>
+                    <p class="text-[10.5px] text-[#d97706]">{{ t('import.csv.warning') }}</p>
+                    <button :disabled="!parsedCsvItems.length" @click="executeCsvImport" class="w-full h-9 rounded-lg bg-[#315bd7] text-xs font-semibold text-white disabled:opacity-40">{{ t('import.run') }}</button>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="showSecurityModal" class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" @mousedown.self="showSecurityModal = false">
+                <div :class="['w-full max-w-md rounded-2xl border p-6 space-y-3', theme === 'dark' ? 'border-[#3c4e73] bg-[#202d49]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                    <h3 class="font-serif text-xl">{{ t('security.title') }}</h3>
+                    <input v-model="pwdChangeForm.currentPassword" type="password" :placeholder="t('security.current')" class="h-9 w-full rounded-lg border px-3 text-xs bg-transparent" />
+                    <input v-model="pwdChangeForm.newPassword" type="password" :placeholder="t('auth.newMasterPassword')" class="h-9 w-full rounded-lg border px-3 text-xs bg-transparent" />
+                    <input v-model="pwdChangeForm.confirmPassword" type="password" :placeholder="t('security.repeatNew')" class="h-9 w-full rounded-lg border px-3 text-xs bg-transparent" />
+                    <button @click="handleChangeOwnPassword" class="w-full h-9 rounded-lg bg-[#315bd7] text-xs font-semibold text-white">{{ t('common.save') }}</button>
+                    <div class="pt-3 border-t border-black/10 dark:border-white/10">
+                        <label class="flex items-center justify-between gap-3 text-xs font-semibold opacity-60">
+                            <span>{{ t('security.siteIcons') }}</span>
+                            <input type="checkbox" v-model="siteIconsEnabled" disabled class="h-4 w-4">
+                        </label>
+                        <p class="mt-1 text-[10px] leading-snug opacity-60">{{ t('security.siteIconsHint') }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="showRecoveryModal" class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" @mousedown.self="showRecoveryModal = false">
+                <div :class="['w-full max-w-md rounded-2xl border p-6 space-y-3', theme === 'dark' ? 'border-[#3c4e73] bg-[#202d49]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                    <h3 class="font-serif text-xl">{{ t('auth.recoveryKey') }}</h3>
+                    <div class="p-3 rounded-lg border font-mono text-xs font-bold text-center select-text">{{ userRecoveryKeyPlain }}</div>
+                    <div class="flex gap-2">
+                        <button @click="copyText(userRecoveryKeyPlain, false)" class="flex-1 h-9 rounded-lg border text-xs font-semibold">{{ t('common.copy') }}</button>
+                        <button @click="downloadRecoverySheet" class="flex-1 h-9 rounded-lg bg-[#315bd7] text-xs font-semibold text-white">{{ t('recovery.download') }}</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Полное окно управления семьей (инвайты + участники + сброс пароля) -->
+            <div v-if="showAdminModal" class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" @mousedown.self="showAdminModal = false">
+                <div :class="['w-full max-w-md rounded-2xl border p-6 space-y-3 max-h-[85dvh] overflow-y-auto', theme === 'dark' ? 'border-[#3c4e73] bg-[#202d49]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-serif text-xl">{{ t('admin.title') }}</h3>
+                        <button @click="showAdminModal = false" :aria-label="t('common.close')"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <button @click="createInviteCode" class="w-full h-9 rounded-lg bg-[#315bd7] text-xs font-semibold text-white">{{ t('admin.createInvite') }}</button>
+                    <div v-if="lastCreatedInvite" class="p-3 rounded-lg border font-mono text-center text-base font-bold text-[#329371] cursor-pointer" @click="copyText(lastCreatedInvite, false)">
+                        {{ lastCreatedInvite }} <span class="text-[10px] font-sans block opacity-75">{{ t('admin.inviteHint', { min: 60 }) }}</span>
+                    </div>
+                    <div class="pt-2 space-y-2">
+                        <div class="text-xs font-bold opacity-75">{{ t('admin.members', { n: familyMembers.length }) }}</div>
+                        <div v-for="m in familyMembers" :key="m.id" class="flex items-center justify-between gap-2 py-2 border-b last:border-b-0 border-black/10 dark:border-white/10 text-xs">
+                            <div class="min-w-0">
+                                <b>{{ m.username }}</b>
+                                <span class="opacity-70 ml-1">({{ m.is_admin ? t('admin.roleAdmin') : t('admin.roleMember') }})</span>
+                                <div v-if="!m.is_admin" class="text-[10px] opacity-60">{{ m.can_admin_recover ? t('admin.canReset') : t('admin.cannotReset') }}</div>
+                            </div>
+                            <button v-if="m.can_admin_recover && !m.is_admin" @click="adminResetMemberPassword(m)" class="shrink-0 rounded-md bg-[#315bd7]/15 px-2.5 py-1 text-[10.5px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
+                                {{ t('admin.resetPassword') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Окно системных логов Rust-сервера -->
+            <div v-if="showLogsModal" class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" @mousedown.self="showLogsModal = false">
+                <div :class="['w-full max-w-lg rounded-2xl border p-6 space-y-3 max-h-[85dvh] flex flex-col', theme === 'dark' ? 'border-[#3c4e73] bg-[#202d49]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-serif text-xl">{{ t('logs.title') }}</h3>
+                        <div class="flex gap-2">
+                            <button @click="clearSystemLogs" class="text-xs text-[#e11d48] font-semibold">{{ t('logs.clear') }}</button>
+                            <button @click="showLogsModal = false" :aria-label="t('common.close')"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                    </div>
+                    <div class="flex-1 overflow-y-auto space-y-1.5 font-mono text-[11px]">
+                        <div v-if="systemLogs.length === 0" class="text-center py-6 opacity-60">{{ t('logs.empty') }}</div>
+                        <div v-for="l in systemLogs" :key="l.id" class="p-2 rounded border border-black/5 dark:border-white/5 flex justify-between gap-2">
+                            <span><b>[{{ l.ts }}]</b> {{ logText(l) }}</span>
+                            <span class="opacity-60">{{ l.user }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Уведомления -->
+            <div class="fixed bottom-20 lg:bottom-5 right-4 z-[95] flex flex-col gap-2">
+                <div v-for="toast in toasts" :key="toast.id" :role="toast.kind === 'error' ? 'alert' : 'status'"
+                     :class="['flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[11px] font-medium shadow-lg',
+                         toast.kind === 'error' ? (theme === 'dark' ? 'border-[#8a4343] bg-[#3b2020] text-[#ffd6d6]' : 'border-[#f0b8b8] bg-[#fff2f2] text-[#8a2f2f]')
+                         : toast.kind === 'warn' ? (theme === 'dark' ? 'border-[#8a7443] bg-[#3b3320] text-[#fff0d0]' : 'border-[#f0dcb0] bg-[#fffaf0] text-[#8a6a1f]')
+                         : (theme === 'dark' ? 'border-[#3e7869] bg-[#203b3b] text-[#d6f4e5]' : 'border-[#b8e4d2] bg-[#f2fff8] text-[#2f7457]')]">
+                    <i :class="['fa-solid', toast.kind === 'error' ? 'fa-circle-xmark text-[#d14b4b]' : toast.kind === 'warn' ? 'fa-triangle-exclamation text-[#d19a2b]' : 'fa-check text-[#329371]']"></i> {{ toast.text }}
+                </div>
+            </div>
+
+        </div>
+    </div>
+<!-- КОНЕЦ ЧАСТИ 1 -->
+<script src="/static/app.js"></script>
+</body>
+</html>
+

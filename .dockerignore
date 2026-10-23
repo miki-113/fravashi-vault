@@ -1,0 +1,13 @@
+data/
+target/
+.git/
+.claude/
+AUDIT.md
+CLAUDE.md
+*.db
+*.db-*
+*.sqlite*
+.env
+.env.*
+tailwind.config.js
+static/input.css
