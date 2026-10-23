@@ -16,7 +16,7 @@ Backend: Rust (Axum, SQLite). Frontend: Vue, no build step for the JavaScript.
 - Password breach check via Have I Been Pwned using k-anonymity (only the first 5 characters of the SHA-1 hash are sent to `api.pwnedpasswords.com`)
 - Offline mode: after a successful login the encrypted items and the wrapped keys are cached in the browser; without a connection you can sign in with the master password and read (not edit) the vault
 - Installable PWA (manifest plus a service worker that caches the app shell)
-- Browser extension (Manifest V3), generated and downloaded from the app: autofills logins. Before filling, it checks that the site in the active tab matches the address saved in the item (the same host or its subdomain); if it does not match, or the item has no address, it shows a warning and fills only after you confirm
+- Browser extension (Manifest V3), generated and downloaded from the app: fills logins and, after an explicit confirmation, bank cards; interface in Russian and English; access to a tab only when you click the extension icon (see [Browser extension](#browser-extension))
 - Import from JSON (this app's format) and CSV; export to JSON (unencrypted, see below)
 - Personal and family items. Family items are encrypted with a shared family key and are shared for editing: every member can change, move to trash and permanently delete any family item. Only the member who created a family item can turn it into a personal one
 - Invite codes: the administrator creates a one-time code (valid 60 minutes from the UI, 5 minutes to 24 hours via the API; 80 bits of randomness); a new member registers with it
@@ -81,15 +81,41 @@ Optional and per user. Users who do not turn it on sign in exactly as before.
   - sessions that are already open stay open when two-factor sign-in is turned on.
 - **Lost phone.** Use a backup code. Without backup codes: resetting the master password with the recovery key ("Recovery key" link on the sign-in screen) also turns two-factor sign-in off, and so does an administrator resetting a member's password (only for members who allowed it at registration). After that, sign in with the new password and turn two-factor sign-in on again if you want it. This also means the recovery key, and the administrator for such members, can bypass the second factor: keep the recovery key as safe as the backup codes.
 
+## Browser extension
+
+Generated in the browser when you press "Download fravashi-extension.zip" (`static/extension-build.js`) and installed as an unpacked extension in Chromium-based desktop browsers. The server address and the window language are taken from the app at the moment of download; if that language is missing, the browser language is used. Version 1.3.0.
+
+**Permissions** (`manifest.json`):
+
+| Permission | Why |
+|---|---|
+| `activeTab` | access to the current tab only after you click the extension icon, and only until that tab navigates to another site; no access to other tabs or in the background |
+| `scripting` | to run the fill function in that tab (`chrome.scripting.executeScript`) when you press a button in the extension window |
+| host permission for the server address only (`https://<your server>/*`) | sign-in and loading the encrypted vault through the API |
+
+No `<all_urls>`, no content scripts on every site, no `tabs`, `storage`, `clipboardWrite`, cookies or history. The extension stores nothing: the master password (and the code) are asked every time the window is opened. Version 1.2.0 and earlier had `<all_urls>`, `tabs`, `storage` and a content script on all sites; reinstall the extension to drop them.
+
+**Filling a login.** "⚡ Fill" compares the site in the tab with the address saved in the item (the same host or its subdomain). If they do not match, or the item has no address, a warning is shown and filling happens only after you confirm. The fill function in the page checks the host once more, so nothing is filled if the page has meanwhile moved to another site.
+
+**Filling a bank card.** Card items get a "Fill card" button. It never fills on its own: a confirmation in the extension window always shows the card name, the last 4 digits and the host of the current page, plus a separate "Fill CVV" checkbox that is **off** by default. Only after "Fill" are the data sent to the page. Where the data come from: card number — the item's "Login" field, CVV — the "Password" field, expiry and holder — custom fields labelled "Expiry"/"Срок" and "Holder"/"Владелец" (as in the app). Fields are found by `autocomplete` (`cc-number`, `cc-exp`, `cc-exp-month`, `cc-exp-year`, `cc-name`, `cc-csc`), then by `name`/`id`/`placeholder`/`aria-label` in English and Russian; only visible, editable `<input>` elements of the page itself. Expiry is accepted as MM/YY or MM/YYYY and written in the format the field suggests.
+
+**Limits:**
+- payment forms embedded from a payment provider (an `<iframe>` from another domain) cannot be filled; the extension does not try to get around this and says "No card fields found on this page, or they are inside an embedded payment form";
+- `<select>` lists for month/year and card numbers split into four inputs are not filled;
+- the host check cannot tell a look-alike domain saved in the item from the real one, and a card has no saved address to compare with: read the host in the confirmation before pressing "Fill";
+- the "Password" field of a card item is labelled "CVV / PIN" in the app: if you keep a PIN there, do not tick "Fill CVV";
+- the page receives the data it was filled with, as with manual typing: fill cards only on sites you trust.
+
 ## Roadmap
 
 The order is not a promise.
 
 - done: optional two-factor sign-in (TOTP), see [Two-factor sign-in](#two-factor-sign-in-totp)
+- done: browser extension 1.3.0 — English interface, narrow permissions (`activeTab`, `scripting`, the server address only), bank card autofill with confirmation, see [Browser extension](#browser-extension)
 - deferred on purpose: browser extension session ("stay unlocked for N minutes"). For now the extension asks for the master password (and the code, if two-factor sign-in is on) every time its window is opened
 - planned: quick unlock with Face ID / Touch ID / Windows Hello / passkey (WebAuthn PRF)
 - planned: loyalty cards with a barcode / QR code
-- planned: bank card autofill in the browser extension
+- planned: filling `<select>` expiry lists and split card number fields in the extension
 - planned: remove `unsafe-eval` from the Content Security Policy (precompiled templates)
 - planned: count metadata in the quota
 - **Not planned:** in-store payments (NFC). This is a password manager, not a wallet.
