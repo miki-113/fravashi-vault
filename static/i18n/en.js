@@ -437,10 +437,12 @@
     "security.changeFailed": "Password change failed",
     "security.changed": "Master password updated",
 
-    "totp.title": "Two-factor protection",
+    "totp.title": "Two-factor authentication",
     "totp.hint": "Signing in to the server also requires a code from an authenticator app (Aegis, 2FAS, Google Authenticator, etc.). It protects account sign-in, not encryption: your items are still protected by the master password.",
     "totp.status.on": "On",
     "totp.status.off": "Off",
+    "totp.badge.on": "On",
+    "totp.badge.off": "Off",
     "totp.offline": "Not available in offline mode",
     "totp.enable": "Enable two-factor protection",
     "totp.disable": "Disable two-factor protection",

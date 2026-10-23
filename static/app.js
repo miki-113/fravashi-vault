@@ -1,6 +1,6 @@
 // Версия сборки: кэш браузера чистится только при смене версии (иначе ломается офлайн-запуск).
 // При каждом обновлении файла на сервере увеличивайте это значение.
-const APP_BUILD = "2026-10-23-4";
+const APP_BUILD = "2026-10-23-5";
 
 // Миграция localStorage после переименования проекта (aegis_* → fravashi_*).
 // Выполняется до любых чтений. offline_auth_* / offline_vault_* имён не меняли, офлайн-копия сохраняется.
@@ -869,6 +869,7 @@ createApp({
         let escrowPublicKeyHex = null;
 
         const showSecurityModal = ref(false);
+        const showTotpModal = ref(false);
                 const siteIconsEnabled = ref(false);
         const pwdChangeForm = ref({ currentPassword: "", newPassword: "", confirmPassword: "" });
 
@@ -1529,14 +1530,29 @@ createApp({
             loginForm.value = { username: "", password: "" };
             await loadVault();
             setFilter("all", "all", "all");
+            loadTotpStatus();
         }
 
         function openSecuritySettingsModal() {
             pwdChangeForm.value = { currentPassword: "", newPassword: "", confirmPassword: "" };
-            resetTotpSettings();
             mobileNavOpen.value = false;
             showSecurityModal.value = true;
+        }
+
+        function openTotpModal() {
+            totpSetup.value = null;
+            totpForm.value = { password: "", code: "" };
+            totpBackupCodes.value = [];
+            mobileNavOpen.value = false;
+            showTotpModal.value = true;
             loadTotpStatus();
+        }
+
+        function closeTotpModal() {
+            showTotpModal.value = false;
+            totpSetup.value = null;
+            totpForm.value = { password: "", code: "" };
+            totpBackupCodes.value = [];
         }
 
         // Настройки двухфакторной защиты (TOTP) в окне безопасности
@@ -1840,6 +1856,8 @@ createApp({
             showItemModal.value = false;
             showAdminModal.value = false;
             showSecurityModal.value = false;
+            showTotpModal.value = false;
+            resetTotpSettings();
             showLogsModal.value = false;
             showGenModal.value = false;
             showImportModal.value = false;
@@ -2418,6 +2436,7 @@ createApp({
                     showGenModal.value = false;
                     showImportModal.value = false;
                     showSecurityModal.value = false;
+                    closeTotpModal();
                     showAdminModal.value = false;
                     showExtensionModal.value = false;
                     showPwaModal.value = false;
@@ -2467,7 +2486,7 @@ createApp({
             combineIntoMultiCard, unmergeMultiCard,
             sessionToken, currentUsername, isAdmin, searchInputRef,
             authMode, showLoginPwd, showModalPwd, loginForm, regForm, recForm, handleLogin, handleRegister, handleRecoveryReset, handleLogout,
-            showSecurityModal, siteIconsEnabled, pwdChangeForm, openSecuritySettingsModal, handleChangeOwnPassword,
+            showSecurityModal, showTotpModal, openTotpModal, closeTotpModal, siteIconsEnabled, pwdChangeForm, openSecuritySettingsModal, handleChangeOwnPassword,
             totpStepActive, totpUseBackup, totpLoginCode, handleTotpLogin, cancelTotpLogin, toggleTotpBackup,
             totpStatus, totpSetup, totpForm, totpBackupCodes, startTotpSetup, cancelTotpSetup, confirmTotpEnable, disableTotp,
             copyBackupCodes, downloadBackupCodes,

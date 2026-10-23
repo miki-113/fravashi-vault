@@ -1009,6 +1009,10 @@
                                         <button @click="openSecuritySettingsModal" class="rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] px-3 py-2 text-xs font-semibold">
                                             {{ t('settings.changePassword') }}
                                         </button>
+                                        <button @click="openTotpModal" class="flex items-center justify-between gap-2 rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] px-3 py-2 text-xs font-semibold">
+                                            <span>{{ t('totp.title') }}</span>
+                                            <span v-if="totpStatus.loaded" :class="['rounded px-1.5 py-0.5 text-[10px] font-semibold', totpStatus.enabled ? 'bg-[#329371]/15 text-[#329371]' : 'bg-black/5 dark:bg-white/10 opacity-70']">{{ totpStatus.enabled ? t('totp.badge.on') : t('totp.badge.off') }}</span>
+                                        </button>
                                         <button v-if="isAdmin" @click="openAdminModal" class="rounded-lg border border-[#d8e0f3] dark:border-[#3b4c6f] px-3 py-2 text-xs font-semibold">
                                             {{ t('settings.family') }}
                                         </button>
@@ -1363,7 +1367,19 @@
                     <input v-model="pwdChangeForm.newPassword" type="password" :placeholder="t('auth.newMasterPassword')" class="h-9 w-full rounded-lg border px-3 text-xs bg-transparent" />
                     <input v-model="pwdChangeForm.confirmPassword" type="password" :placeholder="t('security.repeatNew')" class="h-9 w-full rounded-lg border px-3 text-xs bg-transparent" />
                     <button @click="handleChangeOwnPassword" class="w-full h-9 rounded-lg bg-[#315bd7] text-xs font-semibold text-white">{{ t('common.save') }}</button>
-                    <div class="pt-3 border-t border-black/10 dark:border-white/10 space-y-2">
+                    <div class="pt-3 border-t border-black/10 dark:border-white/10">
+                        <label class="flex items-center justify-between gap-3 text-xs font-semibold opacity-60">
+                            <span>{{ t('security.siteIcons') }}</span>
+                            <input type="checkbox" v-model="siteIconsEnabled" disabled class="h-4 w-4">
+                        </label>
+                        <p class="mt-1 text-[10px] leading-snug opacity-60">{{ t('security.siteIconsHint') }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="showTotpModal" class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" @mousedown.self="closeTotpModal">
+                <div :class="['w-full max-w-md rounded-2xl border p-6 space-y-3 max-h-[90dvh] overflow-y-auto', theme === 'dark' ? 'border-[#3c4e73] bg-[#202d49]' : 'border-[#dce3f4] bg-[#fffefa]']">
+                    <div class="space-y-2">
                         <div class="flex items-center justify-between gap-3">
                             <h4 class="text-sm font-semibold"><i class="fa-solid fa-shield-halved text-xs opacity-70"></i> {{ t('totp.title') }}</h4>
                             <span v-if="totpStatus.loaded" :class="['rounded px-1.5 py-0.5 text-[10px] font-semibold', totpStatus.enabled ? 'bg-[#329371]/15 text-[#329371]' : 'bg-black/5 dark:bg-white/10 opacity-70']">{{ totpStatus.enabled ? t('totp.status.on') : t('totp.status.off') }}</span>
@@ -1403,13 +1419,7 @@
                             <button @click="startTotpSetup" class="w-full h-9 rounded-lg bg-[#315bd7] text-xs font-semibold text-white">{{ t('totp.enable') }}</button>
                         </template>
                     </div>
-                    <div class="pt-3 border-t border-black/10 dark:border-white/10">
-                        <label class="flex items-center justify-between gap-3 text-xs font-semibold opacity-60">
-                            <span>{{ t('security.siteIcons') }}</span>
-                            <input type="checkbox" v-model="siteIconsEnabled" disabled class="h-4 w-4">
-                        </label>
-                        <p class="mt-1 text-[10px] leading-snug opacity-60">{{ t('security.siteIconsHint') }}</p>
-                    </div>
+                    <button @click="closeTotpModal" class="w-full h-9 rounded-lg border text-xs font-semibold">{{ t('common.close') }}</button>
                 </div>
             </div>
 

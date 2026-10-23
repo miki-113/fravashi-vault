@@ -68,7 +68,7 @@ Backend: Rust (Axum, SQLite). Frontend: Vue, no build step for the JavaScript.
 
 Optional and per user. Users who do not turn it on sign in exactly as before.
 
-- **Turning it on.** Settings & services → Change master password → "Two-factor protection". Enter the master password, scan the QR code with an authenticator app (Aegis, 2FAS, Google Authenticator, etc.) or type the key manually, then enter the 6-digit code. Two-factor sign-in starts working only after a correct code. The QR code is drawn in the browser.
+- **Turning it on.** Settings & tools → Two-factor authentication. Enter the master password, scan the QR code with an authenticator app (Aegis, 2FAS, Google Authenticator, etc.) or type the key manually, then enter the 6-digit code. Two-factor sign-in starts working only after a correct code. The QR code is drawn in the browser.
 - **Backup codes.** Right after it is turned on, 10 backup codes are shown **once**, with Copy and Download buttons. Keep them away from the phone. Each code works once instead of an app code; the window shows how many are left. The server stores only an HMAC of each code.
 - **Signing in.** After the master password the app asks for the code; "Use a backup code" accepts a backup code instead. The browser extension has the same second step.
 - **Turning it off.** In the same window: the master password plus an app code or a backup code.
