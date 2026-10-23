@@ -682,13 +682,13 @@
 
                                     <!-- Быстрые кнопки копирования -->
                                     <div class="flex items-center justify-between gap-2 flex-wrap">
-                                        <div :class="['text-[10px] font-semibold uppercase tracking-[0.14em]', theme === 'dark' ? 'text-[#aab9dc]' : 'text-[#7182aa]']">{{ t('item.credentials') }}</div>
+                                        <div :class="['text-[10px] font-semibold uppercase tracking-[0.14em]', theme === 'dark' ? 'text-[#aab9dc]' : 'text-[#7182aa]']">{{ t(selectedItem.decrypted.itemType === 'card' ? 'item.cardData' : 'item.credentials') }}</div>
                                         <div class="flex gap-2">
                                             <button v-if="activeCardData.username" @click="copyText(activeCardData.username, false)" class="flex h-8 items-center gap-1.5 rounded-lg border border-[#315bd7]/30 px-3 text-[11px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
-                                                <i class="fa-regular fa-user text-[10px]"></i> {{ t('item.login') }}
+                                                <i :class="selectedItem.decrypted.itemType === 'card' ? 'fa-regular fa-credit-card text-[10px]' : 'fa-regular fa-user text-[10px]'"></i> {{ t(selectedItem.decrypted.itemType === 'card' ? 'item.copyCardNumber' : 'item.login') }}
                                             </button>
                                             <button v-if="activeCardData.password" @click="copyText(activeCardData.password, true)" class="flex h-8 items-center gap-1.5 rounded-lg bg-[#315bd7] px-3 text-[11px] font-semibold text-white shadow-xs">
-                                                <i class="fa-regular fa-copy text-[10px]"></i> {{ t('item.copyPassword') }}
+                                                <i class="fa-regular fa-copy text-[10px]"></i> {{ t(selectedItem.decrypted.itemType === 'card' ? 'item.copyCvv' : 'item.copyPassword') }}
                                             </button>
                                         </div>
                                     </div>
@@ -710,7 +710,7 @@
                                         <div :class="['px-4 py-3 sm:px-5', theme === 'dark' ? 'bg-[#1b2740]' : 'bg-[#fffefa]']">
                                             <div class="mb-1 flex items-center justify-between gap-2 flex-wrap">
                                                 <label :class="['text-[9.5px] font-semibold uppercase tracking-[0.12em]', theme === 'dark' ? 'text-[#aab9dc]' : 'text-[#7586ad]']">
-                                                    {{ selectedItem.decrypted.itemType === 'card' ? t('item.cvvPin') : t('item.password') }}
+                                                    {{ selectedItem.decrypted.itemType === 'card' ? t('item.cvv') : t('item.password') }}
                                                 </label>
                                                 <div class="flex items-center gap-3">
                                                     <button v-if="selectedItem.decrypted.itemType !== 'card'" @click="checkPwned(activeCardData.password, pwnedKey(activeSubCardIdx))" class="text-[10.5px] font-semibold text-[#315bd7] dark:text-[#91d2ff]" :title="t('pwned.hint')">
@@ -754,14 +754,31 @@
                                     <!-- Дополнительные поля (Custom Fields) -->
                                     <div v-if="selectedItem.decrypted.customFields && selectedItem.decrypted.customFields.length > 0"
                                          :class="['rounded-xl border overflow-hidden', theme === 'dark' ? 'border-[#3a4b70]' : 'border-[#dfe5f3]']">
-                                        <div v-for="(cf, idx) in selectedItem.decrypted.customFields" :key="idx"
-                                             @click="copyText(cf.value, false)"
-                                             :class="['px-4 py-2.5 flex items-center justify-between cursor-pointer border-b last:border-b-0', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#e5eaf6] bg-[#f8faff]']">
-                                            <div>
-                                                <div class="text-[9.5px] font-semibold uppercase opacity-70">{{ cf.label }}</div>
-                                                <div class="text-xs font-semibold">{{ cf.value }}</div>
+                                        <template v-for="(cf, idx) in selectedItem.decrypted.customFields" :key="idx">
+                                            <div v-if="isSecretFieldLabel(cf.label)"
+                                                 :class="['px-4 py-2.5 flex items-center justify-between gap-2 border-b last:border-b-0', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#e5eaf6] bg-[#f8faff]']">
+                                                <div class="min-w-0">
+                                                    <div class="text-[9.5px] font-semibold uppercase opacity-70">{{ cf.label }}</div>
+                                                    <div class="break-all font-mono text-xs font-semibold tracking-wider">{{ shownPwds[customFieldKey(idx)] ? (cf.value || t('item.empty')) : '••••••' }}</div>
+                                                </div>
+                                                <div class="flex shrink-0 items-center gap-3">
+                                                    <button @click="toggleShownPwd(customFieldKey(idx))" class="text-[10.5px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
+                                                        <i :class="shownPwds[customFieldKey(idx)] ? 'fa-regular fa-eye-slash' : 'fa-regular fa-eye'"></i> {{ shownPwds[customFieldKey(idx)] ? t('common.hide') : t('common.show') }}
+                                                    </button>
+                                                    <button @click="copyText(cf.value, true)" class="text-[10.5px] font-semibold text-[#315bd7] dark:text-[#91d2ff]">
+                                                        <i class="fa-regular fa-copy"></i> {{ t('common.copy') }}
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <i class="fa-regular fa-copy text-xs opacity-60"></i>
+                                            <div v-else @click="copyText(cf.value, false)"
+                                                 :class="['px-4 py-2.5 flex items-center justify-between cursor-pointer border-b last:border-b-0', theme === 'dark' ? 'border-[#3a4b70] bg-[#202e4b]' : 'border-[#e5eaf6] bg-[#f8faff]']">
+                                                <div>
+                                                    <div class="text-[9.5px] font-semibold uppercase opacity-70">{{ cf.label }}</div>
+                                                    <div class="text-xs font-semibold">{{ cf.value }}</div>
+                                                </div>
+                                                <i class="fa-regular fa-copy text-xs opacity-60"></i>
+                                            </div>
+                                        </template>
                                         </div>
                                     </div>
 
@@ -772,7 +789,7 @@
 
                                     <!-- Нижние карточки: Сайт + Безопасность -->
                                     <div class="grid gap-3 sm:grid-cols-2">
-                                        <div :class="['rounded-xl border p-3.5', theme === 'dark' ? 'border-[#475680] bg-[#222f4e]' : 'border-[#dbe4fb] bg-[#f1f5ff]']">
+                                        <div v-if="selectedItem.decrypted.itemType !== 'card'" :class="['rounded-xl border p-3.5', theme === 'dark' ? 'border-[#475680] bg-[#222f4e]' : 'border-[#dbe4fb] bg-[#f1f5ff]']">
                                             <div class="mb-1.5 flex items-center gap-2">
                                                 <i class="fa-solid fa-globe text-xs text-[#4f70d5]"></i>
                                                 <span class="text-[9.5px] font-semibold uppercase opacity-75">{{ t('item.site') }}</span>

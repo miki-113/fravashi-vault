@@ -485,3 +485,8 @@ test("splitCardFields/joinCardFields: старые записи читаются
     // пустое поле «Владелец» не мешает найти непустое
     assert.equal(ext.splitCardFields([{ label: "Владелец", value: "" }, { label: "Holder", value: "X" }]).holder, "X");
 });
+
+test("isSecretLabel: ПИН, PIN, Pin-код скрываются, остальные подписи нет", () => {
+    for (const l of ["ПИН", "пин", "PIN", "Pin", "Pin-код", " ПИН-код ", "PIN code"]) assert.equal(ext.isSecretLabel(l), true, l);
+    for (const l of ["Срок", "Владелец", "Pinterest", "Spinner", "Пинтерест", "Pincode", "", undefined]) assert.equal(ext.isSecretLabel(l), false, String(l));
+});

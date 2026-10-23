@@ -21,6 +21,9 @@
     };
     const lbl = (f) => String(f && f.label || "").toLowerCase().trim();
 
+    // Метка доп. поля со скрытым значением в просмотре: ПИН, PIN, Pin-код (без учёта регистра)
+    function isSecretLabel(label) { return CARD_RE.pin.test(lbl({ label })); }
+
     function cardExtra(data) {
         const cf = Array.isArray(data && data.customFields) ? data.customFields : [];
         const find = (re) => (cf.find((f) => re.test(lbl(f)) && String(f.value || "").trim()) || {}).value || "";
@@ -443,7 +446,7 @@
         return files;
     }
 
-    const api = { EXT_VERSION, DICT_PREFIX, buildExtensionFiles, cardExtra, splitCardFields, joinCardFields, parseExpiry, classifyField, expiryValue, hostPattern };
+    const api = { EXT_VERSION, DICT_PREFIX, buildExtensionFiles, cardExtra, isSecretLabel, splitCardFields, joinCardFields, parseExpiry, classifyField, expiryValue, hostPattern };
     if (typeof module !== "undefined" && module.exports) module.exports = api;
     else root.FravashiExtension = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

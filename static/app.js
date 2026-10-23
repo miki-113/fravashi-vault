@@ -1,6 +1,6 @@
 // Версия сборки: кэш браузера чистится только при смене версии (иначе ломается офлайн-запуск).
 // При каждом обновлении файла на сервере увеличивайте это значение.
-const APP_BUILD = "2026-10-23-8";
+const APP_BUILD = "2026-10-23-9";
 
 // Миграция localStorage после переименования проекта (aegis_* → fravashi_*).
 // Выполняется до любых чтений. offline_auth_* / offline_vault_* имён не меняли, офлайн-копия сохраняется.
@@ -950,6 +950,9 @@ createApp({
         function pwnedKey(idx) {
             return `${selectedItem.value?.id}_${idx}`;
         }
+        // Доп. поля вроде «ПИН» в просмотре скрыты; ключ показа отделён от ключей паролей подкарточек
+        function customFieldKey(idx) { return `cf_${selectedItem.value?.id}_${idx}`; }
+        function isSecretFieldLabel(label) { return window.FravashiExtension.isSecretLabel(label); }
         function toggleShownPwd(key) {
             shownPwds.value[key] = !shownPwds.value[key];
         }
@@ -2532,7 +2535,7 @@ createApp({
             isAndroidAppUrl, extractAndroidPkg, getWorkingWebUrl, getGooglePlayUrl, generateWifiQrSvg, activeCardData,
             activeSubCardIdx, subCardsViewAll, isMultiCard, showSingleView, deleteSelectedInGroup,
             formatCardNumber, detectCardBrand, cardExtra,
-            shownPwds, toggleShownPwd, pwnedKey, pwnedInfo, checkPwned,
+            shownPwds, toggleShownPwd, customFieldKey, isSecretFieldLabel, pwnedKey, pwnedInfo, checkPwned,
             idleSecondsLeft, idleLabel,
             showExtensionModal, showPwaModal, canInstallPwa, installPwaNow, showLogsModal, systemLogs, openLogsModal, clearSystemLogs, currentOrigin, triggerPwaInstall, downloadBrowserExtensionZip,
             allFolders, currentFolder, countByFolder, createNewCustomFolder, getItemFolderId, getItemFolderName, quickAssignFolder, autoSortItemsIntoFolders,
