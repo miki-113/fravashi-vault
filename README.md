@@ -80,7 +80,7 @@ Not implemented yet; the order is not a promise.
 Requirements: Docker with Compose, and a reverse proxy that terminates HTTPS (nginx, Caddy, Traefik, the Synology DSM reverse proxy, etc.).
 
 ```sh
-git clone <repository-url> fravashi
+git clone https://github.com/miki-113/fravashi-vault.git fravashi
 cd fravashi
 mkdir data
 ```

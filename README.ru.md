@@ -80,7 +80,7 @@ Self-hosted менеджер паролей с нулевым разглашен
 Нужны Docker с Compose и обратный прокси с HTTPS (nginx, Caddy, Traefik, обратный прокси Synology DSM и т. п.).
 
 ```sh
-git clone <адрес-репозитория> fravashi
+git clone https://github.com/miki-113/fravashi-vault.git fravashi
 cd fravashi
 mkdir data
 ```
