@@ -15,7 +15,8 @@ function loadDicts() {
 }
 const dicts = loadDicts();
 const ORIGIN = "https://vault.test";
-const build = (lang = "ru", origin = ORIGIN) => ext.buildExtensionFiles({ origin, lang, dicts });
+const ICON_FILES = { "favicon-32.png": new Uint8Array([1, 2, 3]), "icon-192.png": new Uint8Array([4, 5, 6]) };
+const build = (lang = "ru", origin = ORIGIN) => ext.buildExtensionFiles({ origin, lang, dicts, icons: ICON_FILES });
 
 // Объекты из vm-контекста — с чужими прототипами: сравниваем их как JSON
 const plain = (x) => JSON.parse(JSON.stringify(x));
@@ -82,18 +83,22 @@ function page(hostname, inputs) {
     };
 }
 
-test("манифест: версия 1.3.0, только activeTab и scripting, сеть — только сервер, без content_scripts", () => {
+test("манифест: версия 1.3.1, иконки, только activeTab и scripting, сеть — только сервер, без content_scripts", () => {
     const files = build("ru");
     const m = JSON.parse(files["manifest.json"]);
     assert.equal(m.manifest_version, 3);
-    assert.equal(m.version, "1.3.0");
-    assert.equal(ext.EXT_VERSION, "1.3.0");
+    assert.equal(m.version, "1.3.1");
+    assert.equal(ext.EXT_VERSION, "1.3.1");
     assert.deepEqual(m.permissions, ["activeTab", "scripting"]);
     assert.deepEqual(m.host_permissions, ["https://vault.test/*"]);
     for (const k of ["content_scripts", "optional_permissions", "optional_host_permissions", "background", "web_accessible_resources", "externally_connectable"]) {
         assert.ok(!(k in m), `лишний ключ ${k}`);
     }
-    assert.deepEqual(Object.keys(files).sort(), ["_locales/en/messages.json", "_locales/ru/messages.json", "manifest.json", "popup.html", "popup.js"]);
+    assert.deepEqual(Object.keys(files).sort(), ["_locales/en/messages.json", "_locales/ru/messages.json", "icons/favicon-32.png", "icons/icon-192.png", "manifest.json", "popup.html", "popup.js"]);
+    const ICONS = { 16: "icons/favicon-32.png", 32: "icons/favicon-32.png", 48: "icons/icon-192.png", 128: "icons/icon-192.png" };
+    assert.deepEqual(m.icons, ICONS);
+    assert.deepEqual(m.action.default_icon, ICONS);
+    for (const p of new Set(Object.values(ICONS))) assert.ok(p in files, p);
     const all = Object.values(files).join("\n");
     for (const bad of ["<all_urls>", "*://*/*", "http://*/*", "https://*/*", "sendMessage", "onMessage"]) assert.ok(!all.includes(bad), bad);
     assert.equal(m.default_locale, "ru");
@@ -308,6 +313,35 @@ test("карта: заполнение только после подтверж�
     await p.api.askCard(CARD);
     await p.els.btnCardYes.onclick();
     assert.equal(p.els.statusBox.textContent, dicts.ru["extension.popup.cardNotFound"]);
+});
+
+test("cardExtra: владелец — только подпись владельца, название и «Card name» не подходят", () => {
+    const h = (cf) => ext.cardExtra({ title: "Test card", customFields: cf }).holder;
+    assert.equal(h([{ label: "Card name", value: "Test card" }]), "");
+    assert.equal(h([{ label: "Название", value: "Test card" }]), "");
+    assert.equal(h([]), "");
+    assert.equal(h([{ label: "Владелец", value: "ANNA I" }]), "ANNA I");
+    assert.equal(h([{ label: "Name", value: "ANNA I" }]), "ANNA I");
+    assert.equal(h([{ label: "Holder", value: " " }, { label: "Cardholder", value: "ANNA I" }]), "ANNA I");
+});
+
+test("карта во вкладке: в cc-name и по имени поля идёт владелец, без владельца поле не трогаем", async () => {
+    const run = async (card, fields) => {
+        const p = loadPopup({ tabUrl: "https://shop.test/" });
+        await p.api.askCard(card);
+        await p.els.btnCardYes.onclick();
+        return runInPage(p.injected[0], page("shop.test", fields));
+    };
+    const num = () => input({ attrs: { autocomplete: "cc-number" } });
+    let name = input({ attrs: { autocomplete: "cc-name" } });
+    await run({ ...CARD, title: "Test card" }, [num(), name]);
+    assert.equal(name.value, "ANNA I");
+    name = input({ name: "cardholder" });
+    await run({ ...CARD, title: "Test card" }, [num(), name]);
+    assert.equal(name.value, "ANNA I");
+    name = input({ attrs: { autocomplete: "cc-name" } });
+    await run({ ...CARD, title: "Test card", holder: "" }, [num(), name]);
+    assert.equal(name.value, "", "без владельца поле не заполняется, название записи не подставляется");
 });
 
 test("карта во вкладке: поиск видимых полей, срок, CVV, смена хоста", async () => {

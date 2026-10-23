@@ -6,7 +6,7 @@
 (function (root) {
     "use strict";
 
-    const EXT_VERSION = "1.3.0";
+    const EXT_VERSION = "1.3.1";
     const DICT_PREFIX = "extension.popup.";
 
     // ---- Чистые функции (используются и приложением, и расширением) ----
@@ -14,10 +14,11 @@
     // Срок и владелец карты лежат в доп. полях записи; регулярки ищут подписи полей на обоих языках
     function cardExtra(data) {
         const cf = Array.isArray(data && data.customFields) ? data.customFields : [];
-        const find = (re) => (cf.find((f) => re.test(String(f.label || "").toLowerCase())) || {}).value || "";
+        const find = (re) => (cf.find((f) => re.test(String(f.label || "").toLowerCase().trim()) && String(f.value || "").trim()) || {}).value || "";
         return {
             expiry: find(/срок|valid|expir|mm\/yy|мм\/гг/), // i18n-ignore
-            holder: find(/владел|holder|держател|имя|name/) // i18n-ignore
+            // Только подпись владельца: «name»/«имя» внутри других подписей («Card name», «Название») владельцем не считается
+            holder: find(/владел|holder|держател|owner|name.?on.?card|имя.{0,12}карт|^(name|имя|фио)$/) // i18n-ignore
         };
     }
 
@@ -112,7 +113,7 @@
         }
         if (!found.number) return { status: "no_fields" };
         set(found.number, card.number);
-        if (found.name && card.holder) set(found.name, card.holder);
+        if (found.name && String(card.holder || "").trim()) set(found.name, card.holder);
         if (card.exp) {
             const kinds = found.exp ? ["exp"] : ["expMonth", "expYear"];
             for (const k of kinds) if (found[k]) set(found[k], expiryValue(k, card.exp, { placeholder: found[k].placeholder, maxLength: found[k].maxLength }));
@@ -372,8 +373,8 @@
         return out;
     }
 
-    // origin — адрес сервера, lang — язык приложения при скачивании, dicts — { ru: {...}, en: {...} } словари приложения
-    function buildExtensionFiles({ origin, lang, dicts }) {
+    // icons — { "favicon-32.png": Uint8Array, "icon-192.png": Uint8Array } (файлы static/icons, читает приложение); origin — адрес сервера, lang — язык приложения при скачивании, dicts — { ru: {...}, en: {...} } словари приложения
+    function buildExtensionFiles({ origin, lang, dicts, icons }) {
         const ext = { ru: popupDict(dicts.ru), en: popupDict(dicts.en) };
         const cfg = { srv: origin, lang, dicts: ext };
         const pageFill = fillCardInPage.toString()
@@ -384,6 +385,7 @@
             + POPUP_FUNCS.map((f) => f.toString()).join("\n")
             + "\n" + fillLoginInPage.toString() + "\n" + pageFill
             + "\nconst LANG = pickLang();\ndocument.addEventListener(\"DOMContentLoaded\", init);\n";
+        const ICONS = { 16: "icons/favicon-32.png", 32: "icons/favicon-32.png", 48: "icons/icon-192.png", 128: "icons/icon-192.png" };
         const manifest = {
             manifest_version: 3,
             name: "__MSG_extName__",
@@ -392,13 +394,15 @@
             default_locale: ext[lang] ? lang : "en",
             permissions: ["activeTab", "scripting"],
             host_permissions: [hostPattern(origin)],
-            action: { default_popup: "popup.html", default_title: "FravashiVault" }
+            icons: ICONS,
+            action: { default_popup: "popup.html", default_title: "FravashiVault", default_icon: ICONS }
         };
         const files = {
             "manifest.json": JSON.stringify(manifest, null, 2),
             "popup.html": POPUP_HTML,
             "popup.js": popupJs
         };
+        for (const [name, bytes] of Object.entries(icons || {})) files["icons/" + name] = bytes;
         for (const l of ["ru", "en"]) {
             files["_locales/" + l + "/messages.json"] = JSON.stringify({
                 extName: { message: ext[l].extName }, extDesc: { message: ext[l].extDesc }

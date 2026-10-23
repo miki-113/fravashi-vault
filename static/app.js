@@ -1,6 +1,6 @@
 // Версия сборки: кэш браузера чистится только при смене версии (иначе ломается офлайн-запуск).
 // При каждом обновлении файла на сервере увеличивайте это значение.
-const APP_BUILD = "2026-10-23-6";
+const APP_BUILD = "2026-10-23-7";
 
 // Миграция localStorage после переименования проекта (aegis_* → fravashi_*).
 // Выполняется до любых чтений. offline_auth_* / offline_vault_* имён не меняли, офлайн-копия сохраняется.
@@ -303,7 +303,7 @@ function createUncompressedZipBlob(filesMap) {
     const centralChunks = [];
     for (const [name, contentStr] of Object.entries(filesMap)) {
         const nameBytes = enc.encode(name);
-        const dataBytes = enc.encode(contentStr);
+        const dataBytes = contentStr instanceof Uint8Array ? contentStr : enc.encode(contentStr);
         const crc = crc32(dataBytes);
         const size = dataBytes.length;
 
@@ -622,9 +622,17 @@ createApp({
             } catch (e) {}
         }
 
-        function downloadBrowserExtensionZip() {
+        async function downloadBrowserExtensionZip() {
+            const icons = {};
+            try {
+                for (const n of ["favicon-32.png", "icon-192.png"]) {
+                    const r = await fetch("/static/icons/" + n);
+                    if (!r.ok) throw new Error(n);
+                    icons[n] = new Uint8Array(await r.arrayBuffer());
+                }
+            } catch (e) { showToast(t("extension.iconsFailed")); return; }
             const blob = createUncompressedZipBlob(window.FravashiExtension.buildExtensionFiles({
-                origin: window.location.origin, lang: lang.value, dicts: { ru: I18N.ru, en: I18N.en }
+                origin: window.location.origin, lang: lang.value, dicts: { ru: I18N.ru, en: I18N.en }, icons
             }));
             const a = document.createElement("a");
             a.href = URL.createObjectURL(blob);

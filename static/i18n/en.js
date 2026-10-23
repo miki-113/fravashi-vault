@@ -339,6 +339,7 @@
     "extension.step5Html": "Pin the FravashiVault icon (puzzle → pin). On the site's page click the icon, sign in with your login and master password, and press <b>“⚡ Fill”</b> or <b>“Fill card”</b>.",
     "extension.note": "Works in desktop Chromium-based browsers. Mobile browsers don't support this kind of extension — use the PWA. The extension window uses the app language selected when you download it. The extension can access a tab only when you click its icon, and on the network it can reach only this server.",
     "extension.downloaded": "fravashi-extension.zip downloaded",
+    "extension.iconsFailed": "Could not load the extension icons, try again",
     "extension.popup.mismatch": "The site in the tab ({site}) does not match the address saved in the item ({saved}). This may be a phishing page. Fill anyway?",
     "extension.popup.noUrl": "The item has no site address, so the tab ({site}) cannot be checked. Fill only if you are sure this is the right site.",
     "extension.popup.fillAnyway": "Fill anyway",

@@ -83,7 +83,7 @@ Optional and per user. Users who do not turn it on sign in exactly as before.
 
 ## Browser extension
 
-Generated in the browser when you press "Download fravashi-extension.zip" (`static/extension-build.js`) and installed as an unpacked extension in Chromium-based desktop browsers. The server address and the window language are taken from the app at the moment of download; if that language is missing, the browser language is used. Version 1.3.0.
+Generated in the browser when you press "Download fravashi-extension.zip" (`static/extension-build.js`) and installed as an unpacked extension in Chromium-based desktop browsers. The server address and the window language are taken from the app at the moment of download; if that language is missing, the browser language is used. Version 1.3.1.
 
 **Permissions** (`manifest.json`):
 
@@ -111,7 +111,7 @@ No `<all_urls>`, no content scripts on every site, no `tabs`, `storage`, `clipbo
 The order is not a promise.
 
 - done: optional two-factor sign-in (TOTP), see [Two-factor sign-in](#two-factor-sign-in-totp)
-- done: browser extension 1.3.0 — English interface, narrow permissions (`activeTab`, `scripting`, the server address only), bank card autofill with confirmation, see [Browser extension](#browser-extension)
+- done: browser extension 1.3.1 — English interface, narrow permissions (`activeTab`, `scripting`, the server address only), bank card autofill with confirmation, see [Browser extension](#browser-extension)
 - deferred on purpose: browser extension session ("stay unlocked for N minutes"). For now the extension asks for the master password (and the code, if two-factor sign-in is on) every time its window is opened
 - planned: quick unlock with Face ID / Touch ID / Windows Hello / passkey (WebAuthn PRF)
 - planned: loyalty cards with a barcode / QR code
