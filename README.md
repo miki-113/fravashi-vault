@@ -21,6 +21,7 @@ Backend: Rust (Axum, SQLite). Frontend: Vue, no build step for the JavaScript.
 - Personal and family items. Family items are encrypted with a shared family key and are shared for editing: every member can change, move to trash and permanently delete any family item. Only the member who created a family item can turn it into a personal one
 - Invite codes: the administrator creates a one-time code (valid 60 minutes from the UI, 5 minutes to 24 hours via the API; 80 bits of randomness); a new member registers with it
 - Emergency recovery key: lets you set a new master password without losing data
+- Optional two-factor sign-in (TOTP): a code from an authenticator app after the master password, plus 10 one-time backup codes; also supported by the browser extension (see [Two-factor sign-in](#two-factor-sign-in-totp))
 - The administrator can reset a member's password (see the threat model for what that implies)
 - Auto-lock after 15 minutes of inactivity; the clipboard is cleared 30 seconds after copying a password
 - Activity log of security events, visible to the administrator (kept in server memory: last 300 entries, lost on restart)
@@ -37,7 +38,8 @@ Backend: Rust (Axum, SQLite). Frontend: Vue, no build step for the JavaScript.
 | Quota per user | 50 MiB of ciphertext for personal items; family items share one 50 MiB quota; at most 20,000 items per user | `MAX_BYTES_PER_USER`, `MAX_ITEMS_PER_USER` |
 | Single request | body up to 512 KiB; import batch up to 5,000 items / 16 MiB | `main.rs` |
 | Session | expires after 12 h of inactivity and at most 24 h after login | `SESSION_TTL`, `SESSION_ABS_TTL` |
-| Attempt limits (15-minute window) | login: 20 per IP and 10 per username; password change: 20 / 10; recovery: 10 / 10; registration: 10 per IP; invite lookup: 10 per IP; administrator resetting a member's password: 5 per IP and 5 per administrator; KDF parameters: 60 per IP per minute | `main.rs` |
+| Two-factor sign-in | TOTP (RFC 6238): HMAC-SHA1, 6 digits, 30-second step, the neighbouring step (±1) is accepted, an already used step is rejected; the secret is stored encrypted with AES-256-GCM under a key derived from the server secret; 10 backup codes of 80 bits each, stored only as HMAC | `main.rs` |
+| Attempt limits (15-minute window) | login: 20 per IP and 10 per username; second sign-in step (code): 20 per IP and 10 per user, and one pending sign-in is cancelled after 5 wrong codes or 5 minutes; enabling or disabling two-factor sign-in: 20 / 10; password change: 20 / 10; recovery: 10 / 10; registration: 10 per IP; invite lookup: 10 per IP; administrator resetting a member's password: 5 per IP and 5 per administrator; KDF parameters: 60 per IP per minute | `main.rs` |
 | Response headers | `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Strict-Transport-Security` (1 year), `Permissions-Policy` (camera, microphone, geolocation off), `Cache-Control: no-store` on `/api/` | `security_headers_middleware` |
 
 ## Security model
@@ -62,13 +64,30 @@ Backend: Rust (Axum, SQLite). Frontend: Vue, no build step for the JavaScript.
 - **No independent security audit has been performed.** Only a self-review exists ([AUDIT.md](AUDIT.md)).
 - HTTPS is mandatory. Run the service only behind a reverse proxy with a valid certificate.
 
+## Two-factor sign-in (TOTP)
+
+Optional and per user. Users who do not turn it on sign in exactly as before.
+
+- **Turning it on.** Settings & services → Change master password → "Two-factor protection". Enter the master password, scan the QR code with an authenticator app (Aegis, 2FAS, Google Authenticator, etc.) or type the key manually, then enter the 6-digit code. Two-factor sign-in starts working only after a correct code. The QR code is drawn in the browser.
+- **Backup codes.** Right after it is turned on, 10 backup codes are shown **once**, with Copy and Download buttons. Keep them away from the phone. Each code works once instead of an app code; the window shows how many are left. The server stores only an HMAC of each code.
+- **Signing in.** After the master password the app asks for the code; "Use a backup code" accepts a backup code instead. The browser extension has the same second step.
+- **Turning it off.** In the same window: the master password plus an app code or a backup code.
+- **What it gives.** Someone who learns your master password (phishing, a password reused elsewhere) still cannot sign in to the server without the code, so they get no session and cannot download your encrypted vault through the API.
+- **What it does NOT give:**
+  - it protects sign-in to the account, not encryption: items are still encrypted only with keys derived from the master password, and the TOTP secret plays no part in encryption;
+  - someone with a copy of the database or a backup needs no code: they attack the master password offline, as before;
+  - offline mode does not ask for a code: the encrypted copy cached in the browser opens with the master password alone;
+  - the TOTP secret is encrypted with a key derived from the server secret, which is kept in the same database (`server_meta`). This protects against a leak of the TOTP table alone, not against theft of the whole database file;
+  - sessions that are already open stay open when two-factor sign-in is turned on.
+- **Lost phone.** Use a backup code. Without backup codes: resetting the master password with the recovery key ("Recovery key" link on the sign-in screen) also turns two-factor sign-in off, and so does an administrator resetting a member's password (only for members who allowed it at registration). After that, sign in with the new password and turn two-factor sign-in on again if you want it. This also means the recovery key, and the administrator for such members, can bypass the second factor: keep the recovery key as safe as the backup codes.
+
 ## Roadmap
 
-Not implemented yet; the order is not a promise.
+The order is not a promise.
 
-- planned: browser extension session ("stay unlocked for N minutes"), optional
-- planned: optional TOTP at sign-in
-- planned: quick unlock with Face ID / Touch ID / Windows Hello (WebAuthn PRF)
+- done: optional two-factor sign-in (TOTP), see [Two-factor sign-in](#two-factor-sign-in-totp)
+- deferred on purpose: browser extension session ("stay unlocked for N minutes"). For now the extension asks for the master password (and the code, if two-factor sign-in is on) every time its window is opened
+- planned: quick unlock with Face ID / Touch ID / Windows Hello / passkey (WebAuthn PRF)
 - planned: loyalty cards with a barcode / QR code
 - planned: bank card autofill in the browser extension
 - planned: remove `unsafe-eval` from the Content Security Policy (precompiled templates)
