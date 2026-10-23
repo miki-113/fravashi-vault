@@ -21,6 +21,7 @@
     <script src="/static/vendor/papaparse.min.js"></script>
     <script src="/static/vendor/qrcode.js"></script>
     <script src="/static/import-json.js"></script>
+    <script src="/static/vault-sync.js"></script>
     <script src="/static/extension-build.js"></script>
     <script src="/static/i18n/ru.js"></script>
     <script src="/static/i18n/en.js"></script>
@@ -406,7 +407,7 @@
                             <div :class="['flex h-9 items-center gap-1.5 rounded-lg border px-2 sm:px-2.5 font-mono text-[11px] font-semibold tabular-nums transition', idleSecondsLeft <= 60 ? 'border-[#e11d48]/60 bg-[#e11d48]/10 text-[#e11d48]' : (theme === 'dark' ? 'border-[#3b4c6f] bg-[#202d49] text-[#91d2ff]' : 'border-[#d8e0f3] bg-white text-[#536ca7]')]" :title="t('header.idleHint')">
                                 <i class="fa-regular fa-clock text-[10px]"></i> {{ idleLabel }}
                             </div>
-                            <button @click="loadVault(); showToast(t('header.refreshed'))" :title="t('header.refresh')" :aria-label="t('header.refresh')"
+                            <button @click="refreshVault()" :title="t('header.refresh')" :aria-label="t('header.refresh')"
                                     :class="['grid h-9 w-9 place-items-center rounded-lg border transition', theme === 'dark' ? 'border-[#3b4c6f] bg-[#202d49] text-[#91d2ff]' : 'border-[#d8e0f3] bg-white text-[#536ca7]']">
                                 <i class="fa-solid fa-rotate text-xs"></i>
                             </button>

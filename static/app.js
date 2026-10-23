@@ -1,18 +1,21 @@
 // Версия сборки: кэш браузера чистится только при смене версии (иначе ломается офлайн-запуск).
 // При каждом обновлении файла на сервере увеличивайте это значение.
-const APP_BUILD = "2026-10-23-9";
+const APP_BUILD = "2026-10-23-10";
 
 // Миграция localStorage после переименования проекта (aegis_* → fravashi_*).
 // Выполняется до любых чтений. offline_auth_* / offline_vault_* имён не меняли, офлайн-копия сохраняется.
 (function migrateLegacyStorage() {
     try {
-        for (const name of ["build", "custom_folders", "folder_map", "ignored_dups", "local_trash_ids", "mockup_theme"]) {
+        for (const name of ["build", "custom_folders", "folder_map", "ignored_dups", "mockup_theme"]) {
             const oldKey = "aegis_" + name, newKey = "fravashi_" + name;
             const oldVal = localStorage.getItem(oldKey);
             if (oldVal === null) continue;
             if (localStorage.getItem(newKey) === null) localStorage.setItem(newKey, oldVal);
             localStorage.removeItem(oldKey);
         }
+        // Локальный список корзины больше не используется: он перекрывал флаг сервера и показывал устаревшую корзину
+        localStorage.removeItem("aegis_local_trash_ids");
+        localStorage.removeItem("fravashi_local_trash_ids");
     } catch (e) {}
 })();
 
@@ -1871,45 +1874,39 @@ createApp({
             if (isAutoIdle === true) showToast(t("auth.autoLocked"));
         }
 
-        function getLocalTrashedSet() {
-            try { return new Set(JSON.parse(localStorage.getItem("fravashi_local_trash_ids") || "[]")); }
-            catch (e) { return new Set(); }
-        }
-        function saveLocalTrashedSet(setObj) {
-            localStorage.setItem("fravashi_local_trash_ids", JSON.stringify(Array.from(setObj)));
-        }
-
+        // Загрузка списка: при наличии сети всегда сервер, офлайн-копия — только резерв (static/vault-sync.js).
+        // Возвращает источник: "server" | "cache" | "offline" | "logout".
+        let loadVaultSeq = 0;
         async function loadVault() {
-            if (!vaultKey) return handleLogout();
-            let rawItems = [];
+            if (!vaultKey) { handleLogout(); return "logout"; }
+            const seq = ++loadVaultSeq;
             const unameKey = currentUsername.value.toLowerCase();
+            const cache = {
+                read: () => localStorage.getItem(`offline_vault_${unameKey}`),
+                write: (v) => localStorage.setItem(`offline_vault_${unameKey}`, v)
+            };
 
+            let source, rawItems;
             if (sessionToken.value !== "OFFLINE_MODE") {
-                try {
-                    const res = await fetch("/api/vault", { headers: { "Authorization": `Bearer ${sessionToken.value}` } });
-                    if (!res.ok) return handleLogout();
-                    const data = await res.json();
-                    rawItems = Array.isArray(data.items) ? data.items : [];
-                    localStorage.setItem(`offline_vault_${unameKey}`, JSON.stringify(rawItems));
-                } catch (e) {
-                    const cached = localStorage.getItem(`offline_vault_${unameKey}`);
-                    rawItems = cached ? JSON.parse(cached) : [];
-                }
+                const r = await FravashiSync.fetchVaultItems({ fetchFn: (u, o) => fetch(u, o), token: sessionToken.value, cache });
+                if (r.source === "unauthorized") { handleLogout(); return "logout"; }
+                source = r.source;
+                rawItems = r.items;
             } else {
-                const cached = localStorage.getItem(`offline_vault_${unameKey}`);
-                rawItems = cached ? JSON.parse(cached) : [];
+                source = "offline";
+                rawItems = FravashiSync.readCachedItems(cache);
             }
+            // Пока шёл запрос, мог начаться более новый (кнопка, фокус, таймер) или сессия закрылась
+            if (seq !== loadVaultSeq || !vaultKey) return source;
 
-            const localTrash = getLocalTrashedSet();
             const list = [];
             for (const it of rawItems) {
                 const keyToUse = (it.scope === 'family' && familyKey) ? familyKey : vaultKey;
                 const dec = await decryptData(keyToUse, it.ciphertext, it.iv) || { title: t("item.undecryptable"), itemType: "login" };
                 if (!dec.itemType) dec.itemType = "login";
-                const isTrashedFlag = Boolean(it.is_trashed) || Boolean(dec._trashed) || localTrash.has(it.id);
                 list.push({
                     ...it,
-                    is_trashed: isTrashedFlag,
+                    is_trashed: FravashiSync.isItemTrashed(it, dec),
                     decrypted: dec,
                     showPwd: false,
                     badFavicon: false,
@@ -1918,10 +1915,18 @@ createApp({
                     totpSecondsLeft: 30
                 });
             }
+            if (seq !== loadVaultSeq || !vaultKey) return source;
             vaultItems.value = list;
             if (selectedItem.value) {
                 selectedItem.value = vaultItems.value.find(x => x.id === selectedItem.value.id) || null;
             }
+            return source;
+        }
+
+        async function refreshVault() {
+            const source = await loadVault();
+            if (source === "server") showToast(t("header.refreshed"));
+            else if (source === "cache" || source === "offline") showToast(t("header.refreshedOffline"), "warn");
         }
 
         const filteredItems = computed(() => {
@@ -2106,10 +2111,6 @@ createApp({
         async function moveToTrash(item) {
             if (isOfflineBlocked()) return;
             try {
-                const localTrash = getLocalTrashedSet();
-                localTrash.add(item.id);
-                saveLocalTrashedSet(localTrash);
-
                 const updatedDec = { ...item.decrypted, _trashed: true };
                 const keyToUse = (item.scope === 'family' && familyKey) ? familyKey : vaultKey;
                 const { ciphertext, iv } = await encryptData(keyToUse, updatedDec);
@@ -2138,10 +2139,6 @@ createApp({
         async function restoreFromTrash(item) {
             if (isOfflineBlocked()) return;
             try {
-                const localTrash = getLocalTrashedSet();
-                localTrash.delete(item.id);
-                saveLocalTrashedSet(localTrash);
-
                 const updatedDec = { ...item.decrypted };
                 delete updatedDec._trashed;
                 const keyToUse = (item.scope === 'family' && familyKey) ? familyKey : vaultKey;
@@ -2176,9 +2173,6 @@ createApp({
                 headers: { "Authorization": `Bearer ${sessionToken.value}` }
             });
             if (res.ok) {
-                const localTrash = getLocalTrashedSet();
-                localTrash.delete(id);
-                saveLocalTrashedSet(localTrash);
                 vaultItems.value = vaultItems.value.filter(i => i.id !== id);
                 selectedItem.value = null;
                 showToast(t("trash.deleted"));
@@ -2194,7 +2188,6 @@ createApp({
                     headers: { "Authorization": `Bearer ${sessionToken.value}` }
                 });
             }
-            saveLocalTrashedSet(new Set());
             selectedItem.value = null;
             await loadVault();
             showToast(t("trash.emptied"));
@@ -2486,6 +2479,11 @@ createApp({
                 }
             });
 
+            // Автообновление открытого окна: другая вкладка, PWA или устройство могли изменить сейф
+            setInterval(() => {
+                if (document.visibilityState === "visible" && sessionToken.value && sessionToken.value !== "OFFLINE_MODE") loadVault();
+            }, FravashiSync.AUTO_REFRESH_MS);
+
             window.addEventListener("keydown", (e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
                     e.preventDefault();
@@ -2553,7 +2551,7 @@ createApp({
             currentView, currentCategory, rightPaneMode, searchQuery, sortBy,
             vaultItems, activeItems, trashedItems, itemsWithTotp, countApps, filteredItems,
             duplicateGroups, openDuplicatesView, mergeSingleGroup,
-            selectedItem, selectItemCard, setFilter, loadVault, showToast,
+            selectedItem, selectItemCard, setFilter, loadVault, refreshVault, showToast,
             countByScope, countFavorites, countByCategory,
             weakCount, reusedCount, securityScore, securityBreakdown,
             getFaviconUrl, checkFaviconQuality, formatDomain, formatTimestamp, getInitials, formatTotp,

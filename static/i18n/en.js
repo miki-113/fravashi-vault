@@ -163,6 +163,7 @@
     "header.idleHint": "Auto-lock on inactivity. Any action resets the timer to 15:00",
     "header.refresh": "Refresh list",
     "header.refreshed": "Vault refreshed",
+    "header.refreshedOffline": "No connection to the server: showing the offline copy",
     "header.logout": "Sign out",
 
     "title.vault": "Vault",

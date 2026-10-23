@@ -2322,7 +2322,7 @@ const PRECACHE = [
     '/', '/manifest.json',
     '/static/icons/icon.svg', '/static/icons/favicon.svg', '/static/icons/favicon-32.png', '/static/icons/apple-touch-icon.png',
     '/static/icons/icon-192.png', '/static/icons/icon-512.png', '/static/icons/icon-maskable-192.png', '/static/icons/icon-maskable-512.png',
-    '/static/app.js', '/static/import-json.js', '/static/extension-build.js', '/static/app.css',
+    '/static/app.js', '/static/import-json.js', '/static/vault-sync.js', '/static/extension-build.js', '/static/app.css',
     '/static/i18n/ru.js', '/static/i18n/en.js',
     '/static/vendor/vue.global.prod.js', '/static/vendor/papaparse.min.js', '/static/vendor/qrcode.js',
     '/static/vendor/fonts/fonts.css', '/static/vendor/fontawesome/css/all.min.css',
