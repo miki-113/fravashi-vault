@@ -465,3 +465,23 @@ test("второй шаг входа: истёкший challenge возвращ�
     assert.ok(q.els.totpBox.classes.has("hidden") && !q.els.vaultView.classes.has("hidden"));
     assert.ok(!q.calls.some((c) => c.url.endsWith("/login/totp")));
 });
+
+test("splitCardFields/joinCardFields: старые записи читаются и собираются обратно без потерь", () => {
+    const cf = [
+        { label: "Банк", value: "Тест" }, { label: "Expiry date", value: "07/27" }, { label: "Card holder", value: "ANNA I" },
+        { label: "ПИН", value: "1234" }, { label: "Card name", value: "Test card" }
+    ];
+    const s = plain(ext.splitCardFields(cf));
+    assert.deepEqual([s.expiry, s.holder, s.pin], ["07/27", "ANNA I", "1234"]);
+    assert.deepEqual(s.rest, [{ label: "Банк", value: "Тест" }, { label: "Card name", value: "Test card" }]);
+    // совпадает с cardExtra (его же использует расширение)
+    assert.deepEqual({ expiry: s.expiry, holder: s.holder }, plain(ext.cardExtra({ customFields: cf })));
+    // прежние метки сохраняются, порядок: поля карты, затем остальные
+    const back = plain(ext.joinCardFields(s));
+    assert.deepEqual(back.map((f) => f.label), ["Expiry date", "Card holder", "ПИН", "Банк", "Card name"]);
+    // пустые значения не сохраняются, новые получают русские метки
+    assert.deepEqual(plain(ext.joinCardFields({ expiry: "08/30", holder: " ", pin: "", rest: [] })), [{ label: "Срок", value: "08/30" }]);
+    assert.deepEqual(plain(ext.splitCardFields(undefined)), { expiry: "", holder: "", pin: "", labels: {}, rest: [] });
+    // пустое поле «Владелец» не мешает найти непустое
+    assert.equal(ext.splitCardFields([{ label: "Владелец", value: "" }, { label: "Holder", value: "X" }]).holder, "X");
+});

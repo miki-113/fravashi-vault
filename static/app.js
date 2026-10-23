@@ -1,6 +1,6 @@
 // Версия сборки: кэш браузера чистится только при смене версии (иначе ломается офлайн-запуск).
 // При каждом обновлении файла на сервере увеличивайте это значение.
-const APP_BUILD = "2026-10-23-7";
+const APP_BUILD = "2026-10-23-8";
 
 // Миграция localStorage после переименования проекта (aegis_* → fravashi_*).
 // Выполняется до любых чтений. offline_auth_* / offline_vault_* имён не меняли, офлайн-копия сохраняется.
@@ -265,6 +265,25 @@ function detectCardBrand(n) {
     if (/^(5[1-5]|2[2-7])/.test(d)) return "Mastercard";
     if (/^62/.test(d)) return "UnionPay";
     return "";
+}
+// Маски полей формы карты
+function maskCardNumber(v) {
+    const d = String(v || "").replace(/\D/g, "").slice(0, 19);
+    return d.replace(/(.{4})(?=.)/g, "$1 ");
+}
+function maskExpiry(v) {
+    let d = String(v || "").replace(/\D/g, "").slice(0, 4);
+    if (d.length === 1 && d > "1") d = "0" + d;
+    return d.length > 2 ? d.slice(0, 2) + "/" + d.slice(2) : d;
+}
+function luhnOk(d) {
+    let sum = 0;
+    for (let i = 0; i < d.length; i++) {
+        let n = Number(d[d.length - 1 - i]);
+        if (i % 2 === 1) { n *= 2; if (n > 9) n -= 9; }
+        sum += n;
+    }
+    return sum % 10 === 0;
 }
 // Подписи доп. полей «Срок» и «Владелец» ищутся так же, как в расширении браузера (static/extension-build.js)
 function getCardExtra(data) {
@@ -819,6 +838,9 @@ createApp({
         const authMode = ref("login");
         const showLoginPwd = ref(false);
         const showModalPwd = ref(false);
+        // Поля карты в форме: срок, владелец и ПИН хранятся в доп. полях записи (при сохранении собираются обратно)
+        const cardForm = ref({ expiry: "", holder: "", pin: "", labels: {} });
+        let formType = "login";
         const loginForm = ref({ username: "", password: "" });
         const regForm = ref({ username: "", password: "", passwordConfirm: "", inviteCode: "", setupToken: "", allowEscrow: true });
         const recForm = ref({ username: "", recoveryKey: "", newPassword: "" });
@@ -1950,6 +1972,9 @@ createApp({
                     passwordHistory: Array.isArray(item.decrypted.passwordHistory) ? JSON.parse(JSON.stringify(item.decrypted.passwordHistory)) : [],
                     subCards: Array.isArray(item.decrypted.subCards) ? JSON.parse(JSON.stringify(item.decrypted.subCards)) : []
                 };
+                formType = itemForm.value.itemType;
+                cardForm.value = { expiry: "", holder: "", pin: "", labels: {} };
+                if (formType === "card") moveCardFieldsToForm();
             } else {
                 editingItem.value = null;
                 itemForm.value = {
@@ -1958,9 +1983,60 @@ createApp({
                     folder: currentFolder.value !== 'all' ? currentFolder.value : '',
                     title: "", url: "", username: "", password: "", totpSecret: "", note: "", customFields: [], passwordHistory: [], subCards: []
                 };
+                formType = itemForm.value.itemType;
+                cardForm.value = { expiry: "", holder: "", pin: "", labels: {} };
             }
             showItemModal.value = true;
         }
+
+        // Срок/владелец/ПИН карты: из доп. полей — в отдельные поля формы и обратно
+        function moveCardFieldsToForm() {
+            const { rest, ...own } = window.FravashiExtension.splitCardFields(itemForm.value.customFields);
+            cardForm.value = own;
+            itemForm.value.customFields = rest;
+        }
+        function moveCardFieldsToCustom() {
+            itemForm.value.customFields = window.FravashiExtension.joinCardFields({ ...cardForm.value, rest: itemForm.value.customFields });
+            cardForm.value = { expiry: "", holder: "", pin: "", labels: {} };
+        }
+        // Смена типа в форме: поля карты переезжают между отдельными полями и доп. полями, ничего не теряется
+        function onItemTypeChange() {
+            const nt = itemForm.value.itemType;
+            if (nt === formType) return;
+            if (formType === "card") moveCardFieldsToCustom();
+            if (nt === "card") moveCardFieldsToForm();
+            formType = nt;
+        }
+        function onCardNumberInput(e) { itemForm.value.username = e.target.value = maskCardNumber(e.target.value); }
+        function onCardExpiryInput(e) { cardForm.value.expiry = e.target.value = maskExpiry(e.target.value); }
+        function onCardCvvInput(e) { itemForm.value.password = e.target.value = e.target.value.replace(/\D/g, "").slice(0, 4); }
+        function onCardPinInput(e) { cardForm.value.pin = e.target.value = e.target.value.replace(/\D/g, "").slice(0, 8); }
+
+        // Мягкая проверка: только подсказки под полями, сохранение не блокируется
+        const cardWarn = computed(() => {
+            const f = itemForm.value, c = cardForm.value;
+            const digits = String(f.username || "").replace(/\D/g, "");
+            const exp = String(c.expiry || "");
+            const expParsed = window.FravashiExtension.parseExpiry(exp);
+            return {
+                number: !!digits && (digits.length < 13 || digits.length > 19 || !luhnOk(digits)),
+                expiry: !!exp && !expParsed,
+                cvv: !!f.password && !/^\d{3,4}$/.test(f.password)
+            };
+        });
+        const loginWarn = computed(() => {
+            const f = itemForm.value;
+            const u = String(f.url || "").trim();
+            let badUrl = false;
+            if (u) {
+                try {
+                    const h = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(u) ? u : "https://" + u).hostname;
+                    badUrl = !(h.includes(".") || h === "localhost");
+                } catch (e) { badUrl = true; }
+            }
+            const s = String(f.totpSecret || "").replace(/[\s-]/g, "");
+            return { url: badUrl, totp: !!s && !/^[A-Za-z2-7]+=*$/.test(s) };
+        });
 
         async function saveItem() {
             if (isOfflineBlocked()) return;
@@ -1977,7 +2053,10 @@ createApp({
             }
 
             const keyToUse = (itemForm.value.scope === 'family' && familyKey) ? familyKey : vaultKey;
-            const { ciphertext, iv } = await encryptData(keyToUse, itemForm.value);
+            // Схема записи прежняя: отдельные поля формы карты собираются обратно в доп. поля
+            const data = { ...itemForm.value };
+            if (data.itemType === "card") data.customFields = window.FravashiExtension.joinCardFields({ ...cardForm.value, rest: data.customFields });
+            const { ciphertext, iv } = await encryptData(keyToUse, data);
             const payload = {
                 scope: itemForm.value.scope,
                 category: itemForm.value.itemType || "general",
@@ -2475,7 +2554,7 @@ createApp({
             countByScope, countFavorites, countByCategory,
             weakCount, reusedCount, securityScore, securityBreakdown,
             getFaviconUrl, checkFaviconQuality, formatDomain, formatTimestamp, getInitials, formatTotp,
-            showItemModal, editingItem, itemForm, openItemModal, saveItem, toggleFavorite,
+            showItemModal, editingItem, itemForm, cardForm, cardWarn, loginWarn, onItemTypeChange, onCardNumberInput, onCardExpiryInput, onCardCvvInput, onCardPinInput, openItemModal, saveItem, toggleFavorite,
             moveToTrash, restoreFromTrash, deletePermanently, emptyTrashAll,
             showGenModal, genLength, generatedPasswordString, genOpts, genOptionList, toggleGenOpt, genStrength,
             openPasswordGenerator, generatePasswordPreview, generatePasswordIntoForm,

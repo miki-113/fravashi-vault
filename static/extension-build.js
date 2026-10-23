@@ -11,15 +11,46 @@
 
     // ---- Чистые функции (используются и приложением, и расширением) ----
 
-    // Срок и владелец карты лежат в доп. полях записи; регулярки ищут подписи полей на обоих языках
+    // Срок, владелец и ПИН карты лежат в доп. полях записи под русскими метками (так их ищут приложение и расширение)
+    const CARD_LABELS = { expiry: "Срок", holder: "Владелец", pin: "ПИН" }; // i18n-ignore
+    const CARD_RE = {
+        expiry: /срок|valid|expir|mm\/yy|мм\/гг/, // i18n-ignore
+        // Только подпись владельца: «name»/«имя» внутри других подписей («Card name», «Название») владельцем не считается
+        holder: /владел|holder|держател|owner|name.?on.?card|имя.{0,12}карт|^(name|имя|фио)$/, // i18n-ignore
+        pin: /^(пин|pin)($|[^a-zа-яё])/ // i18n-ignore
+    };
+    const lbl = (f) => String(f && f.label || "").toLowerCase().trim();
+
     function cardExtra(data) {
         const cf = Array.isArray(data && data.customFields) ? data.customFields : [];
-        const find = (re) => (cf.find((f) => re.test(String(f.label || "").toLowerCase().trim()) && String(f.value || "").trim()) || {}).value || "";
-        return {
-            expiry: find(/срок|valid|expir|mm\/yy|мм\/гг/), // i18n-ignore
-            // Только подпись владельца: «name»/«имя» внутри других подписей («Card name», «Название») владельцем не считается
-            holder: find(/владел|holder|держател|owner|name.?on.?card|имя.{0,12}карт|^(name|имя|фио)$/) // i18n-ignore
-        };
+        const find = (re) => (cf.find((f) => re.test(lbl(f)) && String(f.value || "").trim()) || {}).value || "";
+        return { expiry: find(CARD_RE.expiry), holder: find(CARD_RE.holder) };
+    }
+
+    // Доп. поля карты → { expiry, holder, pin, labels, rest }: rest — все остальные поля в прежнем порядке.
+    // Из нескольких подходящих берётся первое с непустым значением (как в cardExtra), иначе первое.
+    function splitCardFields(customFields) {
+        const cf = Array.isArray(customFields) ? customFields : [];
+        const out = { expiry: "", holder: "", pin: "", labels: {}, rest: [] };
+        const taken = new Set();
+        for (const k of ["expiry", "holder", "pin"]) {
+            const ok = (f, i) => !taken.has(i) && CARD_RE[k].test(lbl(f));
+            let i = cf.findIndex((f, j) => ok(f, j) && String(f.value || "").trim());
+            if (i < 0) i = cf.findIndex(ok);
+            if (i >= 0) { taken.add(i); out[k] = String(cf[i].value || ""); out.labels[k] = cf[i].label; }
+        }
+        out.rest = cf.filter((f, i) => !taken.has(i));
+        return out;
+    }
+
+    // Обратная сборка: пустые значения не сохраняются, прежняя метка поля сохраняется
+    function joinCardFields({ expiry, holder, pin, labels, rest }) {
+        const lb = labels || {};
+        const own = [];
+        for (const [k, v] of [["expiry", expiry], ["holder", holder], ["pin", pin]]) {
+            if (String(v || "").trim()) own.push({ label: lb[k] || CARD_LABELS[k], value: String(v).trim() });
+        }
+        return own.concat(Array.isArray(rest) ? rest : []);
     }
 
     // «07/27», «7/2027», «07-27», «07.2027» → { month: "07", year: "2027" }; иначе null
@@ -382,6 +413,7 @@
             .replace("EXPIRY_VALUE", () => expiryValue.toString());
         const popupJs = '"use strict";\nconst CFG = ' + JSON.stringify(cfg) + ";\n"
             + "let state = { token: null, vaultKeyHex: null, items: [] };\nlet pend = null;\n"
+            + "const CARD_RE = {" + Object.entries(CARD_RE).map(([k, r]) => k + ":" + r.toString()).join(",") + "};\nconst lbl = " + lbl.toString() + ";\n"
             + POPUP_FUNCS.map((f) => f.toString()).join("\n")
             + "\n" + fillLoginInPage.toString() + "\n" + pageFill
             + "\nconst LANG = pickLang();\ndocument.addEventListener(\"DOMContentLoaded\", init);\n";
@@ -411,7 +443,7 @@
         return files;
     }
 
-    const api = { EXT_VERSION, DICT_PREFIX, buildExtensionFiles, cardExtra, parseExpiry, classifyField, expiryValue, hostPattern };
+    const api = { EXT_VERSION, DICT_PREFIX, buildExtensionFiles, cardExtra, splitCardFields, joinCardFields, parseExpiry, classifyField, expiryValue, hostPattern };
     if (typeof module !== "undefined" && module.exports) module.exports = api;
     else root.FravashiExtension = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
