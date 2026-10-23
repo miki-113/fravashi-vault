@@ -86,7 +86,7 @@ Generated in the browser when you press "Download fravashi-extension.zip" (`stat
 
 **Installing it, step by step:**
 
-1. Sign in to the app over `https://` and open Tools & types → Browser extension → "Download fravashi-extension.zip". The archive is built for the address of your server, so download it from the server you will use.
+1. Sign in to the app over `https://` and open "Settings & services" → "Vault tools" → "Extension (ZIP)" → "Download fravashi-extension.zip". The archive is built for the address of your server, so download it from the server you will use.
 2. Unpack the zip into a folder you will keep (the browser reads the extension from there).
 3. In Chrome, Edge, Brave or another Chromium browser open `chrome://extensions` (Edge: `edge://extensions`) and turn on "Developer mode".
 4. Click "Load unpacked" and select the unpacked folder.
