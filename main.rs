@@ -702,6 +702,11 @@ async fn security_headers_middleware(req: Request, next: Next) -> Response {
     let h = res.headers_mut();
     if is_api {
         h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    } else if !h.contains_key(header::CACHE_CONTROL) {
+        // Интерфейс и статика: браузер хранит копию, но перед использованием сверяет её с сервером
+        // (If-Modified-Since → 304). Без заголовка браузер сам считал файлы свежими и после выкладки
+        // отдавал старые app.js/app-render.js из своего кэша.
+        h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
     }
     h.insert(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(CSP));
     h.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
@@ -2315,8 +2320,11 @@ async fn serve_manifest() -> Json<serde_json::Value> {
     }))
 }
 
-// Service worker: кэш версионируется параметром ?v=<APP_BUILD> (его передаёт app.js), все ресурсы — локальные.
-const SW_JS: &str = r##"const BUILD = new URL(self.location.href).searchParams.get('v') || 'dev';
+// Service worker: кэш fravashi-pwa-<APP_BUILD>, все ресурсы — локальные. Номер сборки сервер подставляет
+// из static/app.js (serve_sw), поэтому после выкладки текст sw.js меняется и браузер находит новый воркер.
+// Новый воркер ждёт, пока страница не попросит SKIP_WAITING (кнопка «Обновить»). Сразу активируется, если
+// установлен со страницы старой версии (регистрация sw.js?v=…, баннера там нет) или эта сборка уже активна.
+const SW_JS: &str = r##"const BUILD = '__APP_BUILD__';
 const CACHE_NAME = 'fravashi-pwa-' + BUILD;
 const PRECACHE = [
     '/', '/manifest.json',
@@ -2334,11 +2342,19 @@ const PRECACHE = [
     ...['400', '500', '600', '700'].flatMap((w) => ['cyrillic', 'latin'].map((s) => '/static/vendor/fonts/jetbrains-mono-' + s + '-' + w + '-normal.woff2')),
 ];
 self.addEventListener('install', (e) => {
+    const legacy = new URL(self.location.href).searchParams.has('v');
     e.waitUntil(
-        caches.open(CACHE_NAME)
-            .then((c) => Promise.allSettled(PRECACHE.map((u) => c.add(u))))
-            .then(() => self.skipWaiting())
+        caches.has(CACHE_NAME).then((sameBuild) =>
+            caches.open(CACHE_NAME)
+                .then((c) => Promise.allSettled(PRECACHE.map((u) => c.add(new Request(u, { cache: 'no-cache' })))))
+                .then(() => { if (legacy || sameBuild) return self.skipWaiting(); })
+        )
     );
+});
+self.addEventListener('message', (e) => {
+    if (!e.data) return;
+    if (e.data.type === 'SKIP_WAITING') self.skipWaiting();
+    if (e.data.type === 'GET_BUILD' && e.ports[0]) e.ports[0].postMessage(BUILD);
 });
 // Удаляются все кеши, кроме текущего, в том числе старые aegis-pwa-* (до переименования в Fravashi).
 self.addEventListener('activate', (e) => {
@@ -2351,8 +2367,10 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
     const url = new URL(e.request.url);
     if (e.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
+    // Сеть в первую очередь, с проверкой HTTP-кэша браузера; кэш воркера — только для офлайна
+    const req = e.request.mode === 'navigate' ? e.request : new Request(e.request, { cache: 'no-cache' });
     e.respondWith(
-        fetch(e.request).then((res) => {
+        fetch(req).then((res) => {
             if (res.ok) {
                 const clone = res.clone();
                 caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
@@ -2362,8 +2380,24 @@ self.addEventListener('fetch', (e) => {
     );
 });"##;
 
+// APP_BUILD из исходника app.js: `const APP_BUILD = "…";`. Файл читается при каждом запросе, как index.html.
+fn app_build_from_source(src: &str) -> Option<&str> {
+    const MARK: &str = "const APP_BUILD = \"";
+    let rest = &src[src.find(MARK)? + MARK.len()..];
+    let build = &rest[..rest.find('"')?];
+    let ok = !build.is_empty()
+        && build.len() <= 64
+        && build.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.');
+    ok.then_some(build)
+}
+
+fn sw_script(app_js: &str) -> String {
+    SW_JS.replace("__APP_BUILD__", app_build_from_source(app_js).unwrap_or("dev"))
+}
+
 async fn serve_sw() -> Response {
-    ([(header::CONTENT_TYPE, "application/javascript")], SW_JS).into_response()
+    let app_js = fs::read_to_string("static/app.js").unwrap_or_default();
+    ([(header::CONTENT_TYPE, "application/javascript")], sw_script(&app_js)).into_response()
 }
 
 async fn serve_spa() -> Html<String> {
@@ -2916,6 +2950,32 @@ mod tests {
             let pp = h["permissions-policy"].to_str().unwrap();
             assert!(pp.contains("camera=()") && pp.contains("microphone=()") && pp.contains("geolocation=()"));
         }
+    }
+
+    #[test]
+    fn sw_script_carries_app_build() {
+        let sw = sw_script("const X = 1;
+const APP_BUILD = \"2026-10-25-3\";
+");
+        assert!(sw.contains("const BUILD = '2026-10-25-3';") && !sw.contains("__APP_BUILD__"));
+        assert!(sw.contains("SKIP_WAITING") && sw.contains("GET_BUILD"));
+        // посторонние символы в номере сборки в скрипт не попадают
+        assert!(sw_script("const APP_BUILD = \"x';alert(1)//\";").contains("const BUILD = 'dev';"));
+        assert!(sw_script("").contains("const BUILD = 'dev';"));
+        let src = fs::read_to_string("static/app.js").unwrap();
+        assert!(app_build_from_source(&src).is_some());
+    }
+
+    #[tokio::test]
+    async fn static_revalidated_api_not_stored() {
+        let app = build_app(test_state());
+        for uri in ["/", "/sw.js", "/manifest.json", "/static/app.js"] {
+            let res = send(&app, Method::GET, uri, &[], vec![]).await;
+            assert_eq!(res.status(), StatusCode::OK, "{uri}");
+            assert_eq!(res.headers()[header::CACHE_CONTROL], "no-cache", "{uri}");
+        }
+        let res = send(&app, Method::GET, "/api/status", &[], vec![]).await;
+        assert_eq!(res.headers()[header::CACHE_CONTROL], "no-store");
     }
 
     #[tokio::test]

@@ -1,14 +1,14 @@
-// Версия сборки: кэш браузера чистится только при смене версии (иначе ломается офлайн-запуск).
-// При каждом обновлении файла на сервере увеличивайте это значение.
-const APP_BUILD = "2026-10-25-2";
+// Версия сборки: по ней service worker называет свой кэш (fravashi-pwa-<APP_BUILD>), а открытые окна
+// узнают о новой версии. При каждом обновлении файлов на сервере увеличивайте это значение.
+const APP_BUILD = "2026-10-25-3";
 // Версия программы: при выпуске поднять вместе с version в Cargo.toml (проверяет tests/version.test.mjs).
-const APP_VERSION = "1.0.3";
+const APP_VERSION = "1.0.4";
 
 // Миграция localStorage после переименования проекта (aegis_* → fravashi_*).
 // Выполняется до любых чтений. offline_auth_* / offline_vault_* имён не меняли, офлайн-копия сохраняется.
 (function migrateLegacyStorage() {
     try {
-        for (const name of ["build", "custom_folders", "folder_map", "ignored_dups", "mockup_theme"]) {
+        for (const name of ["custom_folders", "folder_map", "ignored_dups", "mockup_theme"]) {
             const oldKey = "aegis_" + name, newKey = "fravashi_" + name;
             const oldVal = localStorage.getItem(oldKey);
             if (oldVal === null) continue;
@@ -18,26 +18,92 @@ const APP_VERSION = "1.0.3";
         // Локальный список корзины больше не используется: он перекрывал флаг сервера и показывал устаревшую корзину
         localStorage.removeItem("aegis_local_trash_ids");
         localStorage.removeItem("fravashi_local_trash_ids");
+        // Номер сборки для ручной очистки кэшей больше не нужен: старые кэши удаляет service worker
+        localStorage.removeItem("aegis_build");
+        localStorage.removeItem("fravashi_build");
     } catch (e) {}
 })();
 
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', async () => {
-        try {
-            if (navigator.onLine && localStorage.getItem("fravashi_build") !== APP_BUILD) {
-                if ('caches' in window) {
-                    const keys = await caches.keys();
-                    for (const k of keys) await caches.delete(k);
-                }
-                localStorage.setItem("fravashi_build", APP_BUILD);
-            }
-            const reg = await navigator.serviceWorker.register('/sw.js?v=' + APP_BUILD);
-            reg.update();
-        } catch (e) {}
+const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
+
+// Обновление интерфейса через service worker (/sw.js, номер сборки в нём подставляет сервер).
+// Новый воркер устанавливается в фоне и ждёт; страница показывает баннер, перезагрузка — только по кнопке
+// «Обновить» в этой вкладке (на открытой форме кнопка просит сначала её закрыть).
+// Проверка: при загрузке, при возврате в окно (не чаще раза в минуту) и раз в 3 минуты, пока окно видно.
+const SW_CHECK_INTERVAL_MS = 3 * 60 * 1000;
+const SW_MIN_CHECK_GAP_MS = 60 * 1000;
+const swUpdateReady = ref(false);
+let swRegistration = null;
+let swReloadRequested = false;
+let swLastCheck = 0;
+
+function checkSwUpdate(force) {
+    if (!swRegistration || !navigator.onLine) return;
+    if (!force && Date.now() - swLastCheck < SW_MIN_CHECK_GAP_MS) return;
+    swLastCheck = Date.now();
+    swRegistration.update().catch(() => {});
+}
+
+// Сборка воркера (сообщение GET_BUILD); null — воркер не ответил
+function swBuildOf(w) {
+    return new Promise((resolve) => {
+        if (!w) return resolve(null);
+        const ch = new MessageChannel();
+        const timer = setTimeout(() => resolve(null), 3000);
+        ch.port1.onmessage = (e) => { clearTimeout(timer); resolve(e.data); };
+        w.postMessage({ type: 'GET_BUILD' }, [ch.port2]);
     });
 }
 
-const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
+// Баннер — только если воркер другой сборки, чем эта страница. Ждущий воркер той же сборки
+// (страница уже новая, а управляет ещё старый воркер) активируется сразу, без перезагрузки.
+async function offerSwUpdate(w) {
+    const build = await swBuildOf(w);
+    if (build !== APP_BUILD) swUpdateReady.value = true;
+    else if (w === swRegistration?.waiting) w.postMessage({ type: 'SKIP_WAITING' });
+}
+
+function watchSwInstalling(reg) {
+    const w = reg.installing;
+    if (!w) return;
+    w.addEventListener('statechange', () => {
+        // Без controller это первая установка, а не обновление
+        if (w.state === 'installed' && navigator.serviceWorker.controller) offerSwUpdate(w);
+    });
+}
+
+function applySwUpdate() {
+    swReloadRequested = true;
+    const waiting = swRegistration?.waiting;
+    if (waiting) waiting.postMessage({ type: 'SKIP_WAITING' });
+    else location.reload();
+}
+
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        // Новый воркер мог активировать и другая вкладка: тогда здесь баннер, без перезагрузки
+        if (swReloadRequested) location.reload();
+        else offerSwUpdate(navigator.serviceWorker.controller);
+    });
+    window.addEventListener('load', async () => {
+        try {
+            const reg = await navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
+            swRegistration = reg;
+            if (reg.waiting && navigator.serviceWorker.controller) offerSwUpdate(reg.waiting);
+            watchSwInstalling(reg);
+            reg.addEventListener('updatefound', () => watchSwInstalling(reg));
+            checkSwUpdate(true);
+        } catch (e) {}
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') checkSwUpdate(false);
+    });
+    window.addEventListener('focus', () => checkSwUpdate(false));
+    window.addEventListener('online', () => checkSwUpdate(true));
+    setInterval(() => {
+        if (document.visibilityState === 'visible') checkSwUpdate(true);
+    }, SW_CHECK_INTERVAL_MS);
+}
 const ITEM_TYPES = ["login", "card", "discount", "wifi", "note"];
 
 // Локализация: словари static/i18n/*.js подключаются до app.js и кладут себя в window.FRAVASHI_I18N[язык].
@@ -1268,6 +1334,15 @@ createApp({
             const id = ++toastSeq;
             toasts.value.push({ id, text, kind });
             setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id); }, 2800);
+        }
+
+        // Кнопка «Обновить» в баннере новой версии: перезагрузка не должна терять открытую форму
+        function applyUpdate() {
+            if (showItemModal.value || showImportModal.value || showTotpModal.value || showRecoveryModal.value || showAdminModal.value || photoEdit.value) {
+                showToast(t("update.closeFormFirst"), "warn");
+                return;
+            }
+            applySwUpdate();
         }
 
         function setFilter(view, category, folder = "all") {
@@ -2727,7 +2802,7 @@ createApp({
         });
 
         return {
-            t, tp, lang, setLang, displayUsername, APP_VERSION, APP_BUILD,
+            t, tp, lang, setLang, displayUsername, APP_VERSION, APP_BUILD, swUpdateReady, applyUpdate,
             loading, hasUsers, setupTokenRequired, theme, setTheme, getEntryColorHex, decodePunycodeText, currentTitle, rightPaneTitle, logText,
             isAndroidAppUrl, extractAndroidPkg, getWorkingWebUrl, getGooglePlayUrl, generateWifiQrSvg, activeCardData,
             activeSubCardIdx, subCardsViewAll, isMultiCard, showSingleView, deleteSelectedInGroup,

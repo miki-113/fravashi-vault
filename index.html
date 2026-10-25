@@ -216,6 +216,7 @@
                             </div>
                         </div>
                     </div>
+                    <p :class="['mt-3 text-center text-[10px] opacity-70', theme === 'dark' ? 'text-[#aab8d5]' : 'text-[#7281a4]']">{{ t('settings.version', { version: APP_VERSION, build: APP_BUILD }) }}</p>
                 </div>
             </div>
 
@@ -1670,6 +1671,18 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Доступна новая версия: перезагрузка только по кнопке -->
+            <div v-if="swUpdateReady" role="status"
+                 :class="['fixed bottom-20 lg:bottom-5 left-4 z-[95] flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-lg border px-4 py-2.5 text-[11px] font-medium shadow-lg', theme === 'dark' ? 'border-[#3b4c6f] bg-[#202d49] text-[#edf1ff]' : 'border-[#d8e0f3] bg-white text-[#263756]']">
+                <i class="fa-solid fa-arrows-rotate text-[#315bd7]"></i>
+                <div>
+                    <div>{{ t('update.available') }}</div>
+                    <div v-if="sessionToken" class="text-[10px] opacity-70">{{ t('update.reloginHint') }}</div>
+                </div>
+                <button @click="applyUpdate" class="shrink-0 rounded-lg bg-[#315bd7] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#264cc4]">{{ t('update.reload') }}</button>
+                <button @click="swUpdateReady = false" :aria-label="t('common.close')" class="shrink-0 opacity-60 hover:opacity-100"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
             <!-- Уведомления -->
