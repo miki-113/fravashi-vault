@@ -1,6 +1,8 @@
 // Версия сборки: кэш браузера чистится только при смене версии (иначе ломается офлайн-запуск).
 // При каждом обновлении файла на сервере увеличивайте это значение.
-const APP_BUILD = "2026-10-23-15";
+const APP_BUILD = "2026-10-25-1";
+// Версия программы: при выпуске поднять вместе с version в Cargo.toml (проверяет tests/version.test.mjs).
+const APP_VERSION = "1.0.2";
 
 // Миграция localStorage после переименования проекта (aegis_* → fravashi_*).
 // Выполняется до любых чтений. offline_auth_* / offline_vault_* имён не меняли, офлайн-копия сохраняется.
@@ -2725,7 +2727,7 @@ createApp({
         });
 
         return {
-            t, tp, lang, setLang, displayUsername,
+            t, tp, lang, setLang, displayUsername, APP_VERSION, APP_BUILD,
             loading, hasUsers, setupTokenRequired, theme, setTheme, getEntryColorHex, decodePunycodeText, currentTitle, rightPaneTitle, logText,
             isAndroidAppUrl, extractAndroidPkg, getWorkingWebUrl, getGooglePlayUrl, generateWifiQrSvg, activeCardData,
             activeSubCardIdx, subCardsViewAll, isMultiCard, showSingleView, deleteSelectedInGroup,

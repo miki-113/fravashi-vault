@@ -280,6 +280,8 @@ docker compose up -d --build
 
 After an update, reinstall the browser extension and the PWA if the release notes say the key scheme or caches changed.
 
+**Releasing a version (for maintainers).** Raise `version` in `Cargo.toml` (and `Cargo.lock`) and `APP_VERSION` in `static/app.js` to the same number (`tests/version.test.mjs` checks this), raise `APP_BUILD`, run the tests, commit, then push the tag `vX.Y.Z`; GitHub Actions builds the image. The version is shown only inside the app (Settings → Vault tools), never via the public API.
+
 ## Screenshots
 
 **Sign-in screen**

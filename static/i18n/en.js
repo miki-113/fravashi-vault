@@ -91,6 +91,7 @@
     "folder.items.one": "{n} item",
     "folder.items.other": "{n} items",
     "settings.tools": "Vault tools",
+    "settings.version": "FravashiVault v{version} · build {build}",
     "settings.generator": "Password generator",
     "settings.extension": "Extension (ZIP)",
     "settings.installPwa": "Install PWA",

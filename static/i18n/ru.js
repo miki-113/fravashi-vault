@@ -93,6 +93,7 @@
     "folder.items.many": "{n} записей",
     "folder.items.other": "{n} записей",
     "settings.tools": "Инструменты хранилища",
+    "settings.version": "FravashiVault v{version} · сборка {build}",
     "settings.generator": "Генератор паролей",
     "settings.extension": "Расширение (ZIP)",
     "settings.installPwa": "Установить PWA",

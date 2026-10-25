@@ -278,7 +278,7 @@ test("loadPhoto: проверка файла и декодирования", asy
 test("редактор кадра: разметка, строки ru/en, версия сборки", () => {
     const html = read("index.html"), app = read("static/app.js");
     for (const s of ['ref="photoCanvas"', '@pointerdown="onPhotoPointerDown"', '@wheel.prevent="onPhotoWheel"', 'v-model.number="photoEdit.zoom"', "setPhotoMode('contain')", '@click="resetPhotoEdit"', "photoSavedHint"]) assert.ok(html.includes(s), s);
-    assert.ok(app.includes("applyPhotoEdit()") && /APP_BUILD = "2026-10-23-15"/.test(app));
+    assert.ok(app.includes("applyPhotoEdit()") && /APP_BUILD = "2026-10-25-1"/.test(app));
     for (const lang of ["ru", "en"]) {
         const src = read(`static/i18n/${lang}.js`);
         for (const k of ["photoSavedHint", "frameHint", "frameApply", "frameReset", "frameAria", "modeLabel", "mode.cover", "mode.contain", "zoom"]) assert.ok(src.includes(`"item.discount.${k}"`), `${lang}:${k}`);
