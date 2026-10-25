@@ -134,6 +134,22 @@ Requirements: Docker with Compose and, for any access other than from the host i
 
 **Why HTTPS.** The app encrypts everything in the browser with the Web Crypto API (`crypto.subtle`), and browsers expose it only in a secure context. Opening the server over plain `http://` from another device will not work. Browsers treat `http://127.0.0.1:8585` and `http://localhost:8585` as secure, so to try the app on the host itself you do not need a proxy. The browser extension also works only with an `https://` server address.
 
+There are two ways to install. Both use the same container settings (unprivileged user, read-only root file system, all capabilities dropped, port `127.0.0.1:8585`, health check, `.env`).
+
+**Option A: prebuilt image (recommended).** Images for `linux/amd64` and `linux/arm64` are published to `ghcr.io/miki-113/fravashi-vault` by GitHub Actions for every release; nothing is compiled on your host. You only need two files:
+
+```sh
+mkdir fravashi && cd fravashi
+mkdir data
+curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/miki-113/fravashi-vault/main/docker-compose.ghcr.yml
+curl -fsSL -o .env.example https://raw.githubusercontent.com/miki-113/fravashi-vault/main/.env.example
+cp .env.example .env        # Windows (PowerShell): Copy-Item .env.example .env
+```
+
+`docker-compose.ghcr.yml` is saved as `docker-compose.yml`, so plain `docker compose` commands work. It uses the `latest` tag; to pin a release, replace `:latest` with a version such as `:1.0.1` (tags `1.0.1`, `1.0` and `latest` are published for every release).
+
+**Option B: build from source.** Docker compiles the Rust code on your host (takes several minutes and about 2 GB of disk for the build stage):
+
 ```sh
 git clone https://github.com/miki-113/fravashi-vault.git fravashi
 cd fravashi
@@ -141,7 +157,7 @@ mkdir data
 cp .env.example .env        # Windows (PowerShell): Copy-Item .env.example .env
 ```
 
-Edit `.env` (all variables are described in `.env.example`). `VAULT_UID` and `VAULT_GID` must be the owner of `./data` (check with `stat -c '%u:%g' data`; the default is 1000:1000).
+Then, for either option, edit `.env` (all variables are described in `.env.example`). `VAULT_UID` and `VAULT_GID` must be the owner of `./data` (check with `stat -c '%u:%g' data`; the default is 1000:1000).
 
 **Permissions on `data/` (Linux only).** Make the directory belong to that user:
 
@@ -152,10 +168,21 @@ sudo chown -R 1000:1000 ./data && sudo chmod 700 ./data
 On Docker Desktop (Windows/macOS) this is not needed. Then start:
 
 ```sh
-docker compose up -d --build
+docker compose pull && docker compose up -d      # option A: prebuilt image
+docker compose up -d --build                     # option B: build from source
 ```
 
-If the names `fravashi` (container or image) clash with something you already run, remove `container_name` and `image` from `docker-compose.yml`.
+If the name `fravashi` (container or, for option B, image) clashes with something you already run, remove `container_name` (and, for option B, `image`) from `docker-compose.yml`.
+
+**Verifying an image.** Every published image has a signed build provenance attestation (GitHub artifact attestations, Sigstore): it proves the image was built by this repository's workflow from a specific commit and tag. Check it with the [GitHub CLI](https://cli.github.com/) before you start or update:
+
+```sh
+gh attestation verify oci://ghcr.io/miki-113/fravashi-vault:1.0.1 --owner miki-113
+```
+
+The output names the workflow (`.github/workflows/docker.yml`), the tag and the commit. To make sure the server keeps running exactly the image you verified, pin it by digest in `docker-compose.yml`: `image: ghcr.io/miki-113/fravashi-vault@sha256:<digest>` (the digest is shown by `docker buildx imagetools inspect ghcr.io/miki-113/fravashi-vault:1.0.1`).
+
+**Publishing the image (maintainers and forks).** The workflow `.github/workflows/docker.yml` runs when a tag `v*` is pushed (for example `v1.0.1` → image tags `1.0.1`, `1.0`, `latest`) or manually from the Actions tab (a manual run from a branch produces a tag with the branch name, e.g. `main`, and does not change `latest`). It uses only the built-in `GITHUB_TOKEN`; no secrets are needed. A new GHCR package is **private** after its first publication: open the package on GitHub (profile → Packages → `fravashi-vault` → Package settings) and set Change visibility → **Public**, otherwise `docker compose pull` asks for a login. A fork must change `IMAGE` in the workflow and `image:` in `docker-compose.ghcr.yml` to its own name.
 
 The container listens on `127.0.0.1:8585` only (it is not reachable from the network directly). Put an HTTPS reverse proxy in front of it, for example for `https://vault.example.com`:
 
@@ -234,7 +261,17 @@ To restore, stop the container, replace the contents of `data/` with the backup,
 ## Update
 
 1. Make a backup of `data/` (see above).
-2. Update and rebuild:
+2. Update.
+
+Option A (prebuilt image):
+
+```sh
+docker compose pull && docker compose up -d
+```
+
+If you pinned a version or a digest, change it in `docker-compose.yml` first (and verify the new image, see [Verifying an image](#quick-start-docker)). Old images can be removed with `docker image prune`.
+
+Option B (build from source):
 
 ```sh
 git pull

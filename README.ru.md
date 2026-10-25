@@ -134,6 +134,22 @@ Self-hosted менеджер паролей с нулевым разглашен
 
 **Зачем HTTPS.** Приложение шифрует всё в браузере через Web Crypto API (`crypto.subtle`), а браузеры дают его только в защищённом контексте. Открыть сервер по обычному `http://` с другого устройства не получится. Адреса `http://127.0.0.1:8585` и `http://localhost:8585` браузеры считают безопасными, поэтому проверить приложение на самом хосте можно и без прокси. Расширение браузера тоже работает только с адресом сервера по `https://`.
 
+Есть два способа установки. В обоих одинаковые настройки контейнера (непривилегированный пользователь, корневая ФС только для чтения, все capabilities отключены, порт `127.0.0.1:8585`, проверка здоровья, `.env`).
+
+**Способ A: готовый образ (рекомендуется).** Образы для `linux/amd64` и `linux/arm64` публикуются в `ghcr.io/miki-113/fravashi-vault` через GitHub Actions для каждого релиза; на хосте ничего не компилируется. Нужны только два файла:
+
+```sh
+mkdir fravashi && cd fravashi
+mkdir data
+curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/miki-113/fravashi-vault/main/docker-compose.ghcr.yml
+curl -fsSL -o .env.example https://raw.githubusercontent.com/miki-113/fravashi-vault/main/.env.example
+cp .env.example .env        # Windows (PowerShell): Copy-Item .env.example .env
+```
+
+`docker-compose.ghcr.yml` сохраняется под именем `docker-compose.yml`, поэтому работают обычные команды `docker compose`. В нём тег `latest`; чтобы закрепить релиз, замените `:latest` на версию, например `:1.0.1` (для каждого релиза публикуются теги `1.0.1`, `1.0` и `latest`).
+
+**Способ B: сборка из исходников.** Docker компилирует код на Rust прямо на хосте (несколько минут и около 2 ГБ диска на этап сборки):
+
 ```sh
 git clone https://github.com/miki-113/fravashi-vault.git fravashi
 cd fravashi
@@ -141,7 +157,7 @@ mkdir data
 cp .env.example .env        # Windows (PowerShell): Copy-Item .env.example .env
 ```
 
-Отредактируйте `.env` (все переменные описаны в `.env.example`). `VAULT_UID` и `VAULT_GID` должны совпадать с владельцем каталога `./data` (узнать: `stat -c '%u:%g' data`; по умолчанию 1000:1000).
+Дальше для обоих способов отредактируйте `.env` (все переменные описаны в `.env.example`). `VAULT_UID` и `VAULT_GID` должны совпадать с владельцем каталога `./data` (узнать: `stat -c '%u:%g' data`; по умолчанию 1000:1000).
 
 **Права на `data/` (только Linux).** Сделайте этого пользователя владельцем каталога:
 
@@ -152,10 +168,21 @@ sudo chown -R 1000:1000 ./data && sudo chmod 700 ./data
 В Docker Desktop (Windows/macOS) это не нужно. Затем запустите:
 
 ```sh
-docker compose up -d --build
+docker compose pull && docker compose up -d      # способ A: готовый образ
+docker compose up -d --build                     # способ B: сборка из исходников
 ```
 
-Если имена `fravashi` (контейнер или образ) конфликтуют с уже запущенным, уберите `container_name` и `image` из `docker-compose.yml`.
+Если имя `fravashi` (контейнер или, для способа B, образ) конфликтует с уже запущенным, уберите `container_name` (и, для способа B, `image`) из `docker-compose.yml`.
+
+**Проверка образа.** У каждого опубликованного образа есть подписанная аттестация происхождения сборки (GitHub artifact attestations, Sigstore): она подтверждает, что образ собран workflow этого репозитория из конкретного коммита и тега. Проверьте её через [GitHub CLI](https://cli.github.com/) перед запуском или обновлением:
+
+```sh
+gh attestation verify oci://ghcr.io/miki-113/fravashi-vault:1.0.1 --owner miki-113
+```
+
+В выводе указаны workflow (`.github/workflows/docker.yml`), тег и коммит. Чтобы сервер гарантированно работал именно на проверенном образе, закрепите его по digest в `docker-compose.yml`: `image: ghcr.io/miki-113/fravashi-vault@sha256:<digest>` (digest показывает `docker buildx imagetools inspect ghcr.io/miki-113/fravashi-vault:1.0.1`).
+
+**Публикация образа (для сопровождающих и форков).** Workflow `.github/workflows/docker.yml` запускается при push тега `v*` (например, `v1.0.1` → теги образа `1.0.1`, `1.0`, `latest`) или вручную на вкладке Actions (ручной запуск с ветки даёт тег с именем ветки, например `main`, и не меняет `latest`). Используется только встроенный `GITHUB_TOKEN`, секреты не нужны. Новый пакет в GHCR после первой публикации **приватный**: откройте пакет на GitHub (профиль → Packages → `fravashi-vault` → Package settings) и в Change visibility выберите **Public**, иначе `docker compose pull` потребует вход. В форке замените `IMAGE` в workflow и `image:` в `docker-compose.ghcr.yml` на своё имя.
 
 Контейнер слушает только `127.0.0.1:8585` (напрямую из сети он недоступен). Поставьте перед ним обратный прокси с HTTPS, например для `https://vault.example.com`:
 
@@ -234,7 +261,17 @@ docker compose start
 ## Обновление
 
 1. Сделайте резервную копию `data/` (см. выше).
-2. Обновите и пересоберите:
+2. Обновите.
+
+Способ A (готовый образ):
+
+```sh
+docker compose pull && docker compose up -d
+```
+
+Если вы закрепили версию или digest, сначала измените его в `docker-compose.yml` (и проверьте новый образ, см. [Проверка образа](#быстрый-старт-docker)). Старые образы удаляются командой `docker image prune`.
+
+Способ B (сборка из исходников):
 
 ```sh
 git pull

@@ -1,0 +1,40 @@
+# Fravashi from the prebuilt image in GHCR (no Rust build on the host).
+# Save this file as docker-compose.yml in its own directory next to .env and data/,
+# then: docker compose pull && docker compose up -d
+# To pin a version, replace :latest with a release tag, e.g. :1.0.1
+services:
+  fravashi:
+    image: ghcr.io/miki-113/fravashi-vault:latest
+    container_name: fravashi
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8585:8000"
+    # UID:GID of the owner of ./data (default 1000:1000).
+    # To find it, run `stat -c '%u:%g' data` on the host (on a NAS, `id <user>` over SSH also works),
+    # then set VAULT_UID / VAULT_GID in the .env file next to this compose file.
+    # On Linux also fix ownership:
+    #   sudo chown -R <UID>:<GID> ./data && sudo chmod 700 ./data
+    user: "${VAULT_UID:-1000}:${VAULT_GID:-1000}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 256m
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TZ=${TZ:-UTC}
+      - DB_PATH=/app/data/vault-v2.db
+      # Optional: empty means default behaviour (see README)
+      - SETUP_TOKEN=${SETUP_TOKEN:-}
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
+    # Same check as HEALTHCHECK in the Dockerfile (the image has no curl or wget)
+    healthcheck:
+      test: ["CMD", "/app/fravashi", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
