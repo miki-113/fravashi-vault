@@ -1,5 +1,5 @@
 # Этап 1: сборка. Образы закреплены по тегу и digest; обновлять вручную после проверки.
-FROM rust:1.99.0-slim-bookworm@sha256:2c3a22f0a5533ea2dd5a16627bc841228151faa2d4de2644ac9987e4a2f1f2fa AS builder
+FROM rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential pkg-config && rm -rf /var/lib/apt/lists/*
