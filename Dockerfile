@@ -9,7 +9,7 @@ COPY Cargo.toml Cargo.lock main.rs ./
 RUN cargo build --release --locked
 
 # Этап 2: минимальный образ. Только бинарь, index.html и static; без apt-пакетов, curl и wget.
-FROM debian:bookworm-20261020-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
+FROM debian:bookworm-20261027-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3
 
 # Непривилегированный пользователь; реальные UID/GID можно переопределить через user: в compose
 RUN groupadd --system --gid 1000 app \
